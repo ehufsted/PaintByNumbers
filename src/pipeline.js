@@ -72,7 +72,8 @@ export function runPipeline(rgba, settings, opts = {}) {
 
   // B: palette and regions
   const merge = s.paletteMode === 'custom' || !s.mergeOn ? 0 : s.mergeDE;
-  const keyB = [keyA, method.id, s.paletteMode, s.autoN, merge, s.paletteMode === 'custom' ? s.colors : null, s.order, s.cleanup, s.minWidth, s.minArea];
+  // the custom colors by hex only: a name changes no region, and is applied at assembly
+  const keyB = [keyA, method.id, s.paletteMode, s.autoN, merge, s.paletteMode === 'custom' ? s.colors.map((c) => c.hex) : null, s.order, s.cleanup, s.minWidth, s.minArea];
   const B = stage('B', keyB, () => {
     progress('matching colors');
     const colors = s.paletteMode === 'custom' ? s.colors.map((c) => ({ hex: c.hex, name: c.name || '' })) : autoPalette(A.filtered, s.autoN, 1, merge);
@@ -141,7 +142,8 @@ export function runPipeline(rgba, settings, opts = {}) {
     const { seed, ...rest } = r;
     return { ...rest, label: { ...l, x: r3(l.x), y: r3(l.y), size: r3(l.size), room: r3(l.room), leader: l.leader && { x: r3(l.leader.x), y: r3(l.leader.y) } } };
   });
-  const palette = pal.map((p) => ({ num: p.num, hex: p.hex, name: p.name, area: 0, regions: 0, used: false }));
+  const nameOf = (p) => (s.paletteMode === 'custom' ? (s.colors[p.from] && s.colors[p.from].name) || '' : p.name);
+  const palette = pal.map((p) => ({ num: p.num, hex: p.hex, name: nameOf(p), area: 0, regions: 0, used: false }));
   for (const r of regions) { const p = palette[r.c]; p.area += r.area; p.regions++; p.used = true; }
   for (const p of palette) p.area = r3(p.area);
 

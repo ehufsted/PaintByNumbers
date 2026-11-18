@@ -61,8 +61,8 @@ to outline every region of that color.
 Width and height in mm or inches, or a kit size (8 × 10 in to 40 × 50 cm), which
 turns to the image's orientation. Height 0 follows the image; a fixed height
 crops the image to cover the canvas (it is never stretched). *Precision* is the
-resolution the regions are found at: Draft (1000 px on the long side), Normal
-(1600) or Fine (2400).
+resolution the regions are found at: Rough draft (700 px on the long side),
+Draft (1000), Normal (1600) or Fine (2400).
 
 ## Outputs
 

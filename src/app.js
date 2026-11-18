@@ -15,7 +15,7 @@ import { DEFAULTS, PRESETS, toMm, pieceGeometry, applyTone } from './core/units.
 import { LINEAR_LUT, linearToHex, normalizeHex, rgbToOKLab } from './core/color.js';
 import { autoPalette, numberPalette, closePairs } from './core/palette.js';
 import { inRings } from './core/geom.js';
-import { patternSVG, paintedSVG, inkHex, leaderStart, downloadFile, FONT } from './core/svg.js';
+import { patternSVG, paintedSVG, inkHex, leaderStart, downloadFile, FONT, BASELINE } from './core/svg.js';
 import { planHTML, PAPERS, pageWindows, printable, fmtLen, areaText, paintMl } from './core/printout.js';
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
@@ -119,6 +119,9 @@ function onWorkerMessage(ev) {
   }
   if (msg.type === 'done') {
     state.pending = false;
+    // a highlighted color is a palette position: keep it only while the palette is the same
+    const hexes = (p) => (p ? p.palette.map((q) => q.hex).join() : '');
+    if (hexes(state.plan) !== hexes(msg.plan)) state.selColor = -1;
     state.plan = msg.plan;
     if (msg.styled) {
       const c = document.createElement('canvas');
@@ -127,7 +130,6 @@ function onWorkerMessage(ev) {
       state.styled = c;
     }
     state.hitGrid = buildHit(msg.plan);
-    if (state.selColor >= msg.plan.palette.length) state.selColor = -1;
     setStatus(`ready · ${(msg.ms / 1000).toFixed(1)} s`);
     paint();
     updateStats();
@@ -600,7 +602,7 @@ function drawLines(ctx, plan, k, ink) {
 function drawNumbers(ctx, plan, k, ink, filter = null) {
   const lw = Math.max(0.08, 0.6 * state.s.lineWidth, 0.6 / k);
   ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = lw;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';   // placed as the SVG places them (svg.js BASELINE)
   for (const r of plan.regions) {
     const l = r.label;
     if (filter && !filter(r)) continue;
@@ -610,7 +612,7 @@ function drawNumbers(ctx, plan, k, ink, filter = null) {
       ctx.beginPath(); ctx.arc(l.leader.x, l.leader.y, Math.max(0.2, 1.2 * lw), 0, 2 * Math.PI); ctx.fill();
     }
     ctx.font = `${l.size}px ${FONT}`;
-    ctx.fillText(l.text, l.x, l.y);
+    ctx.fillText(l.text, l.x, l.y + BASELINE * l.size);
   }
 }
 

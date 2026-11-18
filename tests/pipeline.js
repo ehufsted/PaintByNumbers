@@ -50,6 +50,15 @@ export function run() {
   check('a cached run (only the numbers changed) equals a fresh one', JSON.stringify(viaCache) === JSON.stringify(fresh));
   check('and it reused the regions', cache.C && viaCache.regions.length === fresh.regions.length);
 
+  // renaming a custom color re-runs no region
+  const cols = [{ hex: '#202020', name: 'black' }, { hex: '#f0f0f0', name: 'white' }];
+  const c2 = {};
+  runPipeline(sphere, { ...base, paletteMode: 'custom', colors: cols }, { cache: c2, imageKey: 1 });
+  const bBefore = c2.B.val;
+  const renamed = runPipeline(sphere, { ...base, paletteMode: 'custom', colors: [{ ...cols[0], name: 'ivory black' }, cols[1]] }, { cache: c2, imageKey: 1 });
+  check('renaming a custom color reuses the regions and shows the new name', c2.B.val === bBefore && renamed.palette.some((p) => p.name === 'ivory black'));
+  const rough = runPipeline(sphere, { ...base, precision: 'rough' });
+  check('rough draft works on a 700 px grid', Math.max(rough.grid.w, rough.grid.h) === 700, `${rough.grid.w} × ${rough.grid.h}`);
   const custom = runPipeline(sphere, { ...base, paletteMode: 'custom', colors: [{ hex: '#202020', name: 'black' }, { hex: '#f0f0f0', name: 'white' }, { hex: '#d07030', name: 'orange' }], order: 'list' });
   check('a custom palette in list order keeps its numbers', custom.palette.map((p) => p.name).join() === 'black,white,orange');
   check('and only its colors appear', custom.regions.every((g) => g.c >= 0 && g.c < 3));

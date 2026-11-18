@@ -108,7 +108,10 @@ export function autoPalette(rgba, n, seed = 1, mergeDE = 0) {
     let best = mergeClusters(got, mergeDE);
     for (let k = N + 1; best.centers.length < N && k <= 3 * N; k++) {
       const raw = run(k);
-      if (raw.centers.length < k) break;   // the image has no more distinct colors
+      // fewer clusters than asked: k-means emptied one (by chance) or the image has
+      // no more distinct colors; either way this k cannot fill a slot, but a
+      // larger k still may
+      if (raw.centers.length < k) continue;
       const m = mergeClusters(raw, mergeDE);
       if (m.centers.length > N) break;
       if (m.centers.length >= best.centers.length) best = m;

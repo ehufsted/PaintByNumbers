@@ -13,6 +13,14 @@
 const NS = 'http://www.w3.org/2000/svg';
 export const FONT = 'Arial, Helvetica, sans-serif';
 
+/**
+ * A number is centred on its point by its BASELINE, not by dominant-baseline,
+ * which Illustrator, cutter software and some Inkscape versions ignore (they
+ * would set every number a third of its height too high). Digits are about
+ * 0.72 em tall (core/labels.js), so the baseline is 0.36 em below the centre.
+ */
+export const BASELINE = 0.36;
+
 export const fmt = (v, dp = 3) => {
   if (!isFinite(v)) return '0';
   const s = v.toFixed(dp);
@@ -111,11 +119,12 @@ export function patternNumbers(plan, o = {}) {
   const fs = plan.regions.length ? plan.regions[0].label.size : 2;
   const uniform = p.cssVars && plan.regions.every((r) => r.label.size === fs);
   const grp = uniform ? attrs(true, [['fill', num, '--pbn-num'], ['font-size', fmt(fs, 2), '--pbn-fs', true]]) : attrs(p.cssVars, [['fill', num, '--pbn-num']]);
-  out.push(`<g id="numbers" font-family="${FONT}" text-anchor="middle" dominant-baseline="central" ${grp}>`);
+  out.push(`<g id="numbers" font-family="${FONT}" text-anchor="middle" ${grp}>`);
   for (const r of plan.regions) {
     const l = r.label;
-    const size = uniform ? '' : ` font-size="${fmt(l.size, 2)}"`;
-    out.push(`<text x="${fmt(l.x)}" y="${fmt(l.y)}"${size}>${escapeXml(l.text)}</text>`);
+    // with the size a CSS variable (the printout), the offset is in em so it follows a raised size
+    const pos = uniform ? `y="${fmt(l.y)}" dy="${BASELINE}em"` : `y="${fmt(l.y + BASELINE * l.size)}" font-size="${fmt(l.size, 2)}"`;
+    out.push(`<text x="${fmt(l.x)}" ${pos}>${escapeXml(l.text)}</text>`);
   }
   out.push('</g>');
   return out.join('\n');

@@ -42,7 +42,7 @@ export const PRESETS = [
 ];
 
 /** Working resolution: the long side of the work raster, px. */
-export const PRECISION = { draft: 1000, normal: 1600, fine: 2400 };
+export const PRECISION = { rough: 700, draft: 1000, normal: 1600, fine: 2400 };
 
 export const DEFAULTS = {
   widthMm: 400,

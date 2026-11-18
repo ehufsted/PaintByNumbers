@@ -11,6 +11,7 @@ export function run() {
   section('core.output', 'The pattern and painted SVGs, the printable page, and project files. Predictions: the SVGs are true size in mm with every boundary drawn once; the 1:1 pages overlap and cover the pattern; a project round-trips its settings and refuses what is not one.');
   const plan = runPipeline(generateSample('rings').color, { widthMm: 150, precision: 'draft', autoN: 6 });
   const { W, H } = plan.piece;
+  const html0 = () => planHTML(plan, { paper: 'a4', fit: true });
   const svg = patternSVG(plan, { lineWidth: 0.3, lineDark: 0.5, numDark: 1, numbers: true });
   check('pattern SVG is true size', svg.includes(`width="${W}mm"`) && svg.includes(`viewBox="0 0 ${W} ${H}"`));
   const lines = svg.split('<g id="lines"')[1].split('</g>')[0].match(/<path /g).length;
@@ -18,6 +19,10 @@ export function run() {
   const texts = (svg.match(/<text /g) || []).length;
   check('one number per region', texts === plan.regions.length, `${texts} numbers, ${plan.regions.length} regions`);
   check('ink greys from darkness', inkHex(0) === '#ffffff' && inkHex(1) === '#000000' && inkHex(0.5) === '#808080' && svg.includes('stroke="#808080"'));
+  const t0 = plan.regions[0].label, m0 = svg.match(/<text x="([0-9.]+)" y="([0-9.]+)"/);
+  check('numbers are placed by their baseline (no dominant-baseline, which editors ignore)',
+    !svg.includes('dominant-baseline') && Math.abs(parseFloat(m0[2]) - (t0.y + 0.36 * t0.size)) < 2e-3, `y ${m0[2]} for a centre at ${t0.y}`);
+  check('the printout offsets them in em, so a raised size stays centred', html0().includes('dy="0.36em"'));
   check('numbers off leaves none', !patternSVG(plan, { numbers: false }).includes('<text '));
   const painted = paintedSVG(plan);
   check('painted SVG: one filled path per region', (painted.match(/<path /g) || []).length === plan.regions.length);
