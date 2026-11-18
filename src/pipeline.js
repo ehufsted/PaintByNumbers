@@ -20,7 +20,7 @@
 //     regions: [{c, rings, area, bbox, nbrs, fill, dE, label}]
 //              c: index into palette; rings: flat [x, y, ...] mm, read even-odd;
 //              label: {x, y, size, text, leader, crowded, room}
-//     chains:  [{pts, a, b}]   every boundary once (b = -1: the canvas edge)
+//     chains:  [{pts, a, b, closed}]   every boundary once (-1: the canvas edge)
 //     stats, notes, method, autoColors }
 
 import { DEFAULTS, PRECISION, applyTone, pieceGeometry } from './core/units.js';
@@ -97,7 +97,7 @@ export function runPipeline(rgba, settings, opts = {}) {
     const pm = planarMap(seg.region, w, h);
     const sm = smoothChains(pm.chains, sigma, 0.2);
     const toMm = (p) => { const o = new Array(p.length); for (let i = 0; i < p.length; i += 2) { o[i] = r3(p[i] * sx); o[i + 1] = r3(p[i + 1] * sy); } return o; };
-    const chains = pm.chains.map((c, i) => ({ pts: toMm(sm[i]), a: c.a, b: c.b }));
+    const chains = pm.chains.map((c, i) => ({ pts: toMm(sm[i]), a: c.a, b: c.b, closed: c.closed }));
     const n = seg.count;
     // per region: its color, pixel count, ΔE against the image, deepest pixel
     const color = new Int32Array(n), cnt = new Float64Array(n), dEsum = new Float64Array(n);

@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaintByNumbers</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #404040; --panel: #303030; --line: #ababff; --text: #e6e7ea;
+    --dim: #ffffff; --accent: #ababff; --warn: #e39820; --bad: #e06c75;
+    --pad: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    padding: 8px 14px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px; flex: 0 0 auto;
+  }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; letter-spacing: .01em; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .hspacer { flex: 1 1 auto; }
+  main { flex: 1 1 auto; display: flex; min-height: 0; }
+
+  aside {
+    width: 380px; flex: 0 0 380px; border-right: 1px solid var(--line);
+    overflow-y: auto; padding: var(--pad); background: var(--panel);
+  }
+  details {
+    border: 1px solid var(--line); border-radius: 6px;
+    margin: 0 0 12px; overflow: hidden;
+  }
+  details > summary {
+    color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary:hover { background: #ffffff10; }
+  details > summary::after { content: '▸'; margin-left: auto; transition: transform .15s; }
+  details[open] > summary::after { transform: rotate(90deg); }
+  details > .body { padding: 0 10px 10px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 0 0 120px; color: var(--dim); }
+  .row input[type=range] { flex: 1 1 auto; min-width: 0; }
+  .row .val { flex: 0 0 62px; text-align: right; font-variant-numeric: tabular-nums; }
+  .row .unit { color: var(--dim); font-size: 12px; }
+  .row[hidden], .group[hidden] { display: none; }
+  input[type=number], input[type=text], select {
+    background: #12131a; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; font: inherit; width: 100%;
+  }
+  input[type=number] { width: 80px; }
+  input[type=color] {
+    width: 44px; height: 26px; padding: 0 2px; border: 1px solid var(--line);
+    border-radius: 4px; background: #12131a; cursor: pointer;
+  }
+  button {
+    background: #262933; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #30343f; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #10131a; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.mini { padding: 2px 7px; font-size: 12px; }
+  .buttons { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+
+  #drop {
+    border: 1px dashed var(--line); border-radius: 6px; padding: 14px;
+    text-align: center; color: var(--dim); cursor: pointer;
+  }
+  #drop.over { border-color: var(--accent); color: var(--accent); }
+  .samples { display: flex; gap: 6px; margin-top: 8px; }
+  .samples button { flex: 1 1 0; padding: 4px; font-size: 12px; }
+
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 4px 10px; }
+  .seg button[aria-pressed=true] { background: var(--accent); color: #10131a; font-weight: 600; }
+  label.check { color: var(--dim); display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 6px 0; }
+  label.check[hidden] { display: none; }
+
+  /* the palette: one row per color */
+  table.colors { width: 100%; border-collapse: collapse; margin: 4px 0; }
+  table.colors th { color: var(--dim); font-weight: normal; font-size: 11px; text-align: left; padding: 2px; }
+  table.colors td { padding: 2px; vertical-align: middle; }
+  table.colors input[type=text] { padding: 2px 4px; }
+  table.colors input.hex { width: 72px; font-family: Consolas, monospace; }
+  table.colors input[type=color] { width: 30px; height: 22px; }
+  table.colors .num { color: var(--dim); font-variant-numeric: tabular-nums; width: 22px; text-align: right; }
+  table.colors button { padding: 1px 5px; font-size: 12px; }
+  table.colors td:last-child { white-space: nowrap; }
+  .autopal { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 4px; margin: 6px 0; }
+  .autopal .chip { display: flex; align-items: center; gap: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .autopal .chip span.sw { width: 20px; height: 20px; }
+
+  /* the color key */
+  table.key { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.key th { color: var(--dim); font-weight: normal; font-size: 11px; text-align: right; padding: 2px 3px; }
+  table.key th:nth-child(-n+3) { text-align: left; }
+  table.key td { padding: 2px 3px; text-align: right; border-top: 1px solid #ffffff14; }
+  table.key td:nth-child(-n+3) { text-align: left; }
+  table.key tr.off td { opacity: .45; }
+  table.key tr.hot td { background: #ababff30; }
+  .sw { display: inline-block; width: 14px; height: 14px; border: 1px solid #0008; border-radius: 2px; vertical-align: middle; }
+
+  section.preview {
+    flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  }
+  .viewbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 6px 10px; border-bottom: 1px solid var(--line); flex: 0 0 auto;
+  }
+  .viewbar .spacer { flex: 1 1 auto; }
+  .viewbar select { width: auto; }
+  .stage {
+    flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px; display: grid;
+    background: repeating-conic-gradient(#191b21 0% 25%, #1d1f26 0% 50%) 50% / 16px 16px;
+  }
+  .canvaswrap { margin: auto; box-shadow: 0 2px 18px #0008; line-height: 0; }
+  .canvaswrap canvas { display: block; cursor: crosshair; }
+
+  footer {
+    flex: 0 0 auto; border-top: 1px solid var(--line); padding: 6px 12px;
+    display: flex; gap: 18px; align-items: center; color: var(--dim);
+    font-variant-numeric: tabular-nums; font-size: 12px; flex-wrap: wrap;
+  }
+  footer b { color: var(--text); font-weight: 600; }
+  #status { margin-left: auto; }
+  .warn { color: var(--warn); }
+  footer b.warn { color: var(--warn); }
+  .bad { color: var(--bad); }
+  footer b.bad { color: var(--bad); }
+  .note { color: var(--dim); font-size: 11px; margin: 6px 0 0; }
+  .note.warn { color: var(--warn); }
+  footer .note { margin: 0; }
+
+  dialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px; max-width: min(960px, 96vw);
+  }
+  dialog::backdrop { background: #000a; }
+  dialog h2 { font-size: 14px; margin: 0 0 8px; }
+  #photoWrap { max-height: 62vh; overflow: auto; border: 1px solid #ffffff22; margin: 8px 0; line-height: 0; }
+  #photoCanvas { cursor: crosshair; max-width: none; }
+  .picked { display: flex; align-items: center; gap: 10px; }
+  .picked[hidden] { display: none; }
+  .picked .big { width: 48px; height: 32px; border: 1px solid #000; border-radius: 4px; }
+  .picked label.check { white-space: nowrap; }
+  .palswatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin: 8px 0; max-height: 46vh; overflow: auto; }
+  .palswatch { display: flex; align-items: center; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .palswatch .chip { width: 26px; height: 26px; border: 1px solid #0008; border-radius: 3px; }
+
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    body { overflow: auto; }
+    main { flex-direction: column; }
+    aside {
+      order: 1; width: auto; flex: 0 0 auto;
+      border-right: 0; border-top: 1px solid var(--line); overflow-y: visible;
+    }
+    .stage { height: 60vh; min-height: 240px; }
+    .viewbar .spacer { display: none; }
+    .row label { flex: 0 0 100px; }
+    header { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+    header .sub { display: none; }
+    footer { gap: 6px 14px; }
+    #status { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>PaintByNumbers</h1>
+  <span class="sub">image &rarr; a paint-by-numbers design</span>
+  <span class="hspacer"></span>
+  <button class="mini" id="resetAll" title="every control back to its default (the image stays)">Reset all</button>
+  <button class="mini" id="openProject" title="open a saved project (.pbn.json): the image and every setting">Open project…</button>
+  <button class="mini" id="saveProject" title="save the image and every setting, to reopen later and get the same design">Save project</button>
+  <input type="file" id="projectFile" accept=".json,.pbn.json,application/json" hidden>
+</header>
+
+<main>
+  <aside>
+    <details open>
+      <summary>Image</summary>
+      <div class="body">
+        <div id="drop">Drop an image, or click to choose</div>
+        <input type="file" id="file" accept="image/*" hidden>
+        <div class="samples">
+          <button data-sample="monalisa">Mona Lisa</button>
+          <button data-sample="rhino">Rhino</button>
+          <button data-sample="sphere">Sphere</button>
+          <button data-sample="rings">Rings</button>
+        </div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Tone</summary>
+      <div class="body">
+        <div class="row">
+          <label for="gamma">Gamma</label>
+          <input type="range" id="gamma" min="0.4" max="3" step="0.05" value="1">
+          <span class="val" id="gammaVal">1.00</span>
+        </div>
+        <div class="row">
+          <label for="brightness">Brightness</label>
+          <input type="range" id="brightness" min="0.2" max="3" step="0.05" value="1">
+          <span class="val" id="brightnessVal">1.00</span>
+        </div>
+        <div class="row">
+          <label for="saturation">Saturation</label>
+          <input type="range" id="saturation" min="0" max="2" step="0.05" value="1">
+          <span class="val" id="saturationVal">1.00</span>
+        </div>
+        <p class="note">Applied to the image before anything else; the Source view shows the result.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Canvas</summary>
+      <div class="body">
+        <div class="row">
+          <label>Units</label>
+          <div class="seg" id="unitSeg">
+            <button data-units="mm" aria-pressed="true">mm</button>
+            <button data-units="in" aria-pressed="false">inches</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="preset">Size</label>
+          <select id="preset"></select>
+        </div>
+        <div class="row">
+          <label for="widthMm">Width</label>
+          <input type="number" id="widthMm" class="len" min="1" step="any" value="400">
+          <span class="unit u"></span>
+        </div>
+        <div class="row">
+          <label for="heightMm">Height</label>
+          <input type="number" id="heightMm" class="len" min="0" step="any" value="0">
+          <span class="unit u"></span>
+        </div>
+        <p class="note" id="pieceNote"></p>
+        <p class="note">Height 0 follows the image. A fixed height crops the image to cover the canvas (it is never stretched); a size preset turns to the image's orientation.</p>
+        <div class="row" title="the resolution the regions are found at: finer is slower">
+          <label for="precision">Precision</label>
+          <select id="precision">
+            <option value="draft">Draft (1000 px)</option>
+            <option value="normal">Normal (1600 px)</option>
+            <option value="fine">Fine (2400 px)</option>
+          </select>
+        </div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Palette</summary>
+      <div class="body">
+        <div class="row">
+          <label>Colors</label>
+          <div class="seg" id="palSeg">
+            <button data-pal="auto" aria-pressed="true">From the image</button>
+            <button data-pal="custom" aria-pressed="false">My colors</button>
+          </div>
+        </div>
+        <div class="group" id="autoGroup">
+          <div class="row">
+            <label for="autoN">How many</label>
+            <input type="range" id="autoN" min="2" max="40" step="1" value="16">
+            <span class="val" id="autoNVal">16</span>
+          </div>
+          <div class="autopal" id="autoPal"></div>
+          <div class="buttons">
+            <button id="editAuto" title="copy these colors into My colors, to edit, rename or match to your paints">Edit these colors…</button>
+          </div>
+          <p class="note">The image's main colors, by clustering (the same image always gives the same colors), numbered light to dark.</p>
+        </div>
+        <div class="group" id="customGroup" hidden>
+          <table class="colors">
+            <thead><tr><th>#</th><th></th><th>Hex</th><th>Name</th><th></th></tr></thead>
+            <tbody id="colorRows"></tbody>
+          </table>
+          <div class="buttons">
+            <button id="addColor">+ Color</button>
+            <button id="samplePhoto" title="pick colors from a photo of your actual paints">Sample from photo…</button>
+            <button id="fromImage" title="extract N colors from the image">From image…</button>
+            <button id="loadPal">Load…</button>
+            <button id="savePal">Save</button>
+            <input type="file" id="palFile" accept=".json,application/json" hidden>
+          </div>
+          <div class="row">
+            <label for="order">Numbering</label>
+            <select id="order">
+              <option value="light">Light to dark (paint order)</option>
+              <option value="list">As listed</option>
+            </select>
+          </div>
+        </div>
+        <p class="note warn" id="palWarn"></p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Detail</summary>
+      <div class="body">
+        <div class="row">
+          <label>Preset</label>
+          <div class="seg" id="detailSeg">
+            <button data-detail="fine" aria-pressed="false">Fine</button>
+            <button data-detail="medium" aria-pressed="true">Medium</button>
+            <button data-detail="coarse" aria-pressed="false">Coarse</button>
+          </div>
+        </div>
+        <div class="row" title="an edge-preserving smoothing of the image (Kuwahara) before colors are matched: flattens texture into patches; 0 = off">
+          <label for="simplify">Simplify image</label>
+          <input type="number" id="simplify" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="each pixel takes the color most common around it, within about this distance: removes speckle and rounds jagged edges; 0 = off">
+          <label for="cleanup">Clean-up</label>
+          <input type="number" id="cleanup" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="no region, and no part of one, narrower than this: thinner parts go to the regions beside them">
+          <label for="minWidth">Narrowest</label>
+          <input type="number" id="minWidth" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row" title="no region smaller than this: smaller ones join the neighbour nearest their color">
+          <label for="minArea">Smallest region</label>
+          <input type="number" id="minArea" min="0" step="any">
+          <span class="unit" id="areaUnit">mm²</span>
+        </div>
+        <div class="row" title="how much each boundary is smoothed along its length; boundaries between neighbours are shared, so smoothing never opens a gap">
+          <label for="edgeSmooth">Edge smoothing</label>
+          <input type="number" id="edgeSmooth" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note">All lengths are on the canvas. Narrowest and Smallest region are what a brush can paint and a number can fit in.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Pattern</summary>
+      <div class="body">
+        <div class="row">
+          <label for="lineWidth">Line width</label>
+          <input type="number" id="lineWidth" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row">
+          <label for="lineDark">Line darkness</label>
+          <input type="range" id="lineDark" min="0" max="100" step="1" value="45">
+          <span class="val" id="lineDarkVal">45%</span>
+        </div>
+        <div class="row">
+          <label for="numDark">Number darkness</label>
+          <input type="range" id="numDark" min="0" max="100" step="1" value="60">
+          <span class="val" id="numDarkVal">60%</span>
+        </div>
+        <label class="check"><input type="checkbox" id="numbers" checked> Numbers</label>
+        <div class="row" title="the smallest number printed inside a region; a region too small for it gets its number outside, on a leader line">
+          <label for="minFont">Smallest number</label>
+          <input type="number" id="minFont" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="row">
+          <label for="maxFont">Largest number</label>
+          <input type="number" id="maxFont" class="len" min="0" step="any">
+          <span class="unit u"></span>
+        </div>
+        <p class="note" id="fontNote"></p>
+        <p class="note">Light grey lines are covered by one coat of paint; black shows through pale colors.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Color key &amp; output</summary>
+      <div class="body">
+        <table class="key" id="key"></table>
+        <div class="row">
+          <label for="coverage">Paint per 100 cm²</label>
+          <input type="number" id="coverage" min="0" step="any" value="1.5">
+          <span class="unit">ml, for the estimate</span>
+        </div>
+        <div class="buttons">
+          <button class="primary" id="printPlan" title="a printable page: color key, preview and the pattern at 1:1 across pages; save it as PDF from the print dialog">Print / PDF…</button>
+          <button id="exportPattern" title="the pattern at true size">Pattern SVG</button>
+          <button id="exportPainted" title="the painted result at true size">Painted SVG</button>
+          <button id="exportCsv">Key CSV</button>
+          <button id="exportPng">PNG</button>
+        </div>
+      </div>
+    </details>
+  </aside>
+
+  <section class="preview">
+    <div class="viewbar">
+      <div class="seg" id="viewSeg">
+        <button data-view="painted" aria-pressed="true">Painted</button>
+        <button data-view="pattern" aria-pressed="false">Pattern</button>
+        <button data-view="overlay" aria-pressed="false" title="the pattern over the image">Overlay</button>
+        <button data-view="source" aria-pressed="false">Source</button>
+        <button data-view="diff" aria-pressed="false" title="how far the painted colors are from the image">Difference</button>
+        <button data-view="problems" aria-pressed="false" title="regions whose numbers are outside them, or crowded">Problems</button>
+      </div>
+      <label class="check">Zoom <select id="zoom">
+        <option value="1">Fit</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
+      </select></label>
+      <div class="spacer"></div>
+      <span id="hint" class="note"></span>
+    </div>
+    <div class="stage" id="stage">
+      <div class="canvaswrap" id="wrap"><canvas id="view"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>regions <b id="statRegions">—</b></span>
+  <span>colors <b id="statColors">—</b></span>
+  <span>canvas <b id="statPiece">—</b></span>
+  <span title="mean ΔE (OKLab × 100) between the image and the painted colors; under ~5 is hard to tell apart">mean ΔE <b id="statMean">—</b></span>
+  <span title="numbers placed outside their region on a leader line (and crowded: no room anywhere)">numbers outside <b id="statLeaders">—</b></span>
+  <span id="status">idle</span>
+</footer>
+
+<dialog id="photoDlg">
+  <h2>Sample colors from a photo</h2>
+  <p class="note">Photograph your paints (swatches painted out on white, in daylight), then click on one. The color is averaged over a small disc, in linear light.</p>
+  <div class="buttons">
+    <button id="photoLoad">Load photo…</button>
+    <input type="file" id="photoFile" accept="image/*" hidden>
+    <label class="check">Radius <input type="range" id="photoRadius" min="1" max="30" step="1" value="6"> <span id="photoRadiusVal"></span> px</label>
+  </div>
+  <div id="photoWrap"><canvas id="photoCanvas" width="10" height="10"></canvas></div>
+  <div class="picked">
+    <span class="big" id="photoSwatch"></span><span id="photoHex">click a color</span>
+    <label class="check">Apply to <select id="photoTarget"></select></label>
+    <button id="photoApply" disabled>Apply</button>
+    <button id="photoAdd" disabled>Add as new color</button>
+    <span class="spacer" style="flex:1"></span>
+    <button id="photoClose">Done</button>
+  </div>
+</dialog>
+
+<dialog id="paletteDlg">
+  <h2>Colors from the image</h2>
+  <p class="note">The image's main colors, by clustering (the same image always gives the same colors).</p>
+  <div class="row"><label for="palN">Colors</label><input type="number" id="palN" min="2" max="40" step="1" value="16"></div>
+  <div class="row"><label for="palMode">Into the palette</label><select id="palMode"><option value="replace">Replace the colors</option><option value="add">Add to them</option></select></div>
+  <div id="palSwatches" class="palswatches"></div>
+  <div class="buttons"><button class="primary" id="palApply">Use these colors</button><button id="palClose">Cancel</button></div>
+</dialog>
+
+<dialog id="printDlg">
+  <h2>Printable design</h2>
+  <div class="row"><label for="paper">Paper</label>
+    <select id="paper"><option value="letter">Letter</option><option value="a4">A4</option><option value="tabloid">Tabloid / Ledger</option><option value="a3">A3</option></select></div>
+  <label class="check"><input type="checkbox" id="pSummary" checked> Color key and preview</label>
+  <label class="check"><input type="checkbox" id="pFit" checked> Whole pattern, scaled to one page</label>
+  <label class="check"><input type="checkbox" id="pPattern" checked> Pattern at 1:1 (split across pages if needed)</label>
+  <p class="note" id="printNote"></p>
+  <div class="buttons"><button class="primary" id="printGo">Open printable page</button><button id="printClose">Cancel</button></div>
+</dialog>
+
+<script>
+  // A CLASSIC script, deliberately: it still runs when the module graph does
+  // not. Opened from the filesystem the app's imports are CORS-blocked before
+  // any of its code executes, so the UI renders but nothing ever responds.
+  if (location.protocol === 'file:') {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;inset:0;z-index:99;background:#fff;color:#222;' +
+      'font:14px/1.6 system-ui,sans-serif;padding:40px;max-width:640px;margin:auto;height:max-content';
+    b.innerHTML =
+      '<h2>This page has to be served over HTTP</h2>' +
+      '<p>Browsers block ES module imports from <code>file://</code>, so the app cannot ' +
+      'load its code. No install needed — run the bundled server from this folder:</p>' +
+      '<pre style="background:#f4f4f4;padding:10px">powershell -ExecutionPolicy Bypass -File serve.ps1</pre>' +
+      '<p>then open <a href="http://localhost:8080/">http://localhost:8080/</a>. ' +
+      'Any other static server works too.</p>';
+    document.body.appendChild(b);
+  }
+</script>
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
