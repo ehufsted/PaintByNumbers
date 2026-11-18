@@ -67,13 +67,55 @@ export function kmeansPoints(rgba, n, seed, toPoint, budget = 20000) {
 }
 
 /**
+ * Clusters closer than `dE` merged, closest pair first, each pair into its
+ * mass-weighted mean (in OKLab), until every two are at least dE apart.
+ */
+export function mergeClusters({ centers, mass }, dE) {
+  const C = centers.map((c) => c.slice()), M = mass.slice();
+  for (;;) {
+    let bi = -1, bj = -1, bd = dE;
+    for (let i = 0; i < C.length; i++) for (let j = i + 1; j < C.length; j++) {
+      const d = deltaE(C[i], C[j]);
+      if (d < bd) { bd = d; bi = i; bj = j; }
+    }
+    if (bi < 0) break;
+    const m = M[bi] + M[bj];
+    C[bi] = C[bi].map((v, d) => (v * M[bi] + C[bj][d] * M[bj]) / m);
+    M[bi] = m;
+    C.splice(bj, 1); M.splice(bj, 1);
+  }
+  return { centers: C, mass: M };
+}
+
+/**
  * N colors from the image, largest share first. Two clusters that land on the
  * same hex (a flat image asked for many colors) come back as one.
+ *
+ * MERGING (mergeDE > 0). k-means spends clusters where the image has the most
+ * pixels, so a dark painting gets several near-blacks no one could tell apart in
+ * a pot. Clusters closer than mergeDE are merged, and the freed slots are
+ * filled: k-means is run again with more clusters (N, N + 1, ...) until merging
+ * leaves N, or as near N as it gets without going over (up to 3N clusters).
+ * Fewer than N come back only when the image has no more colors that far apart.
  * @param {{width, height, data}} rgba  encoded pixels
  * @returns {Array<{hex:string, name:string, share:number}>}
  */
-export function autoPalette(rgba, n, seed = 1) {
-  const { centers, mass } = kmeansPoints(rgba, Math.max(1, Math.round(n)), seed, (r, g, b) => rgbToOKLab(r, g, b));
+export function autoPalette(rgba, n, seed = 1, mergeDE = 0) {
+  const N = Math.max(1, Math.round(n));
+  const run = (k) => kmeansPoints(rgba, k, seed, (r, g, b) => rgbToOKLab(r, g, b));
+  let got = run(N);
+  if (mergeDE > 0) {
+    let best = mergeClusters(got, mergeDE);
+    for (let k = N + 1; best.centers.length < N && k <= 3 * N; k++) {
+      const raw = run(k);
+      if (raw.centers.length < k) break;   // the image has no more distinct colors
+      const m = mergeClusters(raw, mergeDE);
+      if (m.centers.length > N) break;
+      if (m.centers.length >= best.centers.length) best = m;
+    }
+    got = best;
+  }
+  const { centers, mass } = got;
   const byHex = new Map();
   centers.forEach((c, k) => {
     const hex = linearToHex(oklabToRgb(c).map((v) => Math.max(0, Math.min(1, v))));

@@ -1,5 +1,5 @@
 import { section, check, num, makeRGBA } from './runner.js';
-import { autoPalette, numberPalette, closePairs, hexLab } from '../src/core/palette.js';
+import { autoPalette, numberPalette, closePairs, hexLab, mergeClusters } from '../src/core/palette.js';
 import { deltaE } from '../src/core/color.js';
 
 export function run() {
@@ -14,6 +14,25 @@ export function run() {
   check('the same image gives the same palette', JSON.stringify(autoPalette(img, 4)) === JSON.stringify(pal));
   const flat = autoPalette(makeRGBA(10, 10, () => [100, 100, 100]), 6);
   check('a flat image asked for 6 colors gives 1', flat.length === 1, `${flat.length}`);
+
+  // merging: two big near-identical colors and three small distinct ones
+  const S = [[200, 60, 50, 0.4], [203, 63, 52, 0.4], [40, 120, 200, 0.07], [60, 170, 70, 0.07], [240, 220, 90, 0.06]];
+  const stripes = makeRGBA(200, 50, (x) => {
+    let t = x / 200;
+    for (const c of S) { if (t < c[3]) return c; t -= c[3]; }
+    return S[4];
+  });
+  const merged = autoPalette(stripes, 4, 1, 4);
+  const labs = merged.map((p) => hexLab(p.hex));
+  let minGap = Infinity;
+  for (let i = 0; i < labs.length; i++) for (let j = i + 1; j < labs.length; j++) minGap = Math.min(minGap, deltaE(labs[i], labs[j]));
+  const small = S.slice(2).map((c) => Math.min(...labs.map((l) => deltaE(l, hexLab(hex(c.slice(0, 3)))))));
+  check('merging: 4 colors, every two at least 4 ΔE apart', merged.length === 4 && minGap >= 3.9, `${merged.length} colors, closest ${num(minGap, 2)}`);
+  check('merging: the freed slot goes to the small distinct colors', Math.max(...small) < 2, `worst ${num(Math.max(...small), 2)} ΔE`);
+  const mc = mergeClusters({ centers: [[0.5, 0, 0], [0.51, 0, 0], [0.9, 0, 0]], mass: [0.25, 0.75, 0] }, 4);
+  check('mergeClusters: a close pair becomes its weighted mean', mc.centers.length === 2 && Math.abs(mc.centers[0][0] - 0.5075) < 1e-12);
+  const flat4 = autoPalette(makeRGBA(10, 10, () => [100, 100, 100]), 4, 1, 4);
+  check('merging on a flat image still gives its one color', flat4.length === 1);
 
   const cols = [{ hex: '#333333' }, { hex: '#eeeeee' }, { hex: '#888888' }];
   const light = numberPalette(cols, 'light');

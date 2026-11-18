@@ -2,7 +2,7 @@
 //
 //   { app: 'PaintByNumbers', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
-//     units, settings: {...units.DEFAULTS, colors: [{hex, name}]},
+//     units, settings: {...units.DEFAULTS, colors: [{hex, name}], style (core/style.js)},
 //     display: {lineDark, numDark, numbers, coverage} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (k-means is seeded), so the same
@@ -17,6 +17,7 @@
 
 import { normalizeHex } from './color.js';
 import { DEFAULTS, PRECISION } from './units.js';
+import { normalizeStyle } from './style.js';
 
 export const PROJECT_VERSION = 1;
 export const APP = 'PaintByNumbers';
@@ -24,9 +25,9 @@ export const APP = 'PaintByNumbers';
 /** The numeric settings and their valid ranges. */
 const NUMS = {
   widthMm: (x) => x > 0, heightMm: (x) => x >= 0, gamma: (x) => x > 0, brightness: (x) => x > 0,
-  saturation: (x) => x >= 0, autoN: (x) => Number.isInteger(x) && x >= 1 && x <= 60,
-  simplify: (x) => x >= 0, cleanup: (x) => x >= 0, minWidth: (x) => x >= 0, minArea: (x) => x >= 0,
-  edgeSmooth: (x) => x >= 0, minFont: (x) => x > 0, maxFont: (x) => x > 0, lineWidth: (x) => x >= 0,
+  saturation: (x) => x >= 0, autoN: (x) => Number.isInteger(x) && x >= 1 && x <= 60, mergeDE: (x) => x >= 0,
+  cleanup: (x) => x >= 0, minWidth: (x) => x >= 0, minArea: (x) => x >= 0,
+  edgeSmooth: (x) => x >= 0, fontSize: (x) => x > 0, lineWidth: (x) => x >= 0,
 };
 
 export const DISPLAY = { lineDark: 0.45, numDark: 0.6, numbers: true, coverage: 1.5 };
@@ -56,7 +57,9 @@ export function parseProject(json) {
   else if (im.kind === 'file' && typeof im.dataURL === 'string' && /^data:image\//.test(im.dataURL)) image = { kind: 'file', name: String(im.name || 'image'), dataURL: im.dataURL };
   else problems.push('no usable image in the project');
 
-  const src = o.settings && typeof o.settings === 'object' ? o.settings : {};
+  const src = o.settings && typeof o.settings === 'object' ? { ...o.settings } : {};
+  // the first saves had a smallest and largest number size: the smallest is the one size now
+  if (src.fontSize === undefined && src.minFont !== undefined) src.fontSize = src.minFont;
   const settings = { ...DEFAULTS, colors: [] };
   for (const [k, ok] of Object.entries(NUMS)) {
     if (src[k] === undefined) continue;
@@ -64,7 +67,10 @@ export function parseProject(json) {
     if (src[k] !== null && isFinite(x) && ok(x)) settings[k] = x;
     else problems.push(`${k}: unusable, using ${DEFAULTS[k]}`);
   }
-  if (settings.maxFont < settings.minFont) { problems.push('largest number under the smallest: both reset'); settings.minFont = DEFAULTS.minFont; settings.maxFont = DEFAULTS.maxFont; }
+  settings.mergeOn = typeof src.mergeOn === 'boolean' ? src.mergeOn : DEFAULTS.mergeOn;
+  const st = normalizeStyle(src.style);
+  settings.style = st.style;
+  problems.push(...st.problems);
   settings.precision = PRECISION[src.precision] ? src.precision : DEFAULTS.precision;
   settings.paletteMode = src.paletteMode === 'custom' ? 'custom' : 'auto';
   settings.order = src.order === 'list' ? 'list' : 'light';

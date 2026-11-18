@@ -5,19 +5,18 @@
 // (polylabel, Mapbox's algorithm, after Garcia-Castellanos & Lombardo). Unlike
 // the centroid it is always inside, even in a crescent or a ring.
 //
-// HOW BIG. The number's box (digits are about 0.56 em wide and 0.72 em tall in
-// Arial) must fit in that circle, less half the outline's width, with 5% to
-// spare. So the size is the circle's radius over the box's half-diagonal, held
-// between the smallest and largest sizes asked for.
+// ONE SIZE. Every number is printed at the same font size, so they read as one
+// even set across the pattern. A number fits when its box (digits are about
+// 0.56 em wide and 0.72 em tall in Arial) fits in that circle, less half the
+// outline's width, with 5% to spare.
 //
-// TOO SMALL FOR THE SMALLEST. The region keeps its color (the user's choice:
+// TOO SMALL FOR IT. The region keeps its color (the user's choice:
 // small accents such as a highlight in an eye are worth keeping) and its number
 // goes OUTSIDE it, on a short LEADER line to a dot inside. The number is placed
-// at the nearest spot around the region where a number of the smallest size
-// has room (CLEARANCE: the distance to any boundary, from the work raster) and
+// at the nearest spot around the region where a number has room (CLEARANCE: the distance to any boundary, from the work raster) and
 // overlaps no other number; spots are tried on rings of growing radius, 16
-// directions each. When no spot is found the number stays inside at the
-// smallest size, and is counted as crowded.
+// directions each. When no spot is found the number stays inside, and is
+// counted as crowded.
 
 import { ringsDist, ringsBox } from './geom.js';
 
@@ -118,7 +117,7 @@ class CircleGrid {
 /**
  * Numbers for every region.
  * @param {Array<{rings:number[][], num:number, seed?:number[]}>} regions  num: the color's number
- * @param {{minFont:number, maxFont:number, lineWidth:number, W:number, H:number,
+ * @param {{fontSize:number, lineWidth:number, W:number, H:number,
  *          clearance:(x:number, y:number)=>number}} o
  *   clearance: mm from (x, y) to the nearest boundary, read off the work raster
  * @returns {Array<{x, y, size, text, leader:null|{x, y}, crowded:boolean, room:number}>}
@@ -127,14 +126,13 @@ class CircleGrid {
  */
 export function placeLabels(regions, o) {
   const lw = o.lineWidth / 2;
-  const grid = new CircleGrid(Math.max(2, 4 * o.maxFont));
+  const fs = o.fontSize;
+  const grid = new CircleGrid(Math.max(2, 4 * fs));
   const out = regions.map((r) => {
     const text = String(r.num);
-    const pole = polylabel(r.rings, Math.max(0.02, o.minFont / 30), r.seed);
+    const pole = polylabel(r.rings, Math.max(0.02, fs / 30), r.seed);
     const room = Math.max(0, pole.d - lw);
-    const fit = fitFont(text.length, room);
-    const size = Math.min(o.maxFont, fit);
-    return { x: pole.x, y: pole.y, size, text, leader: null, crowded: false, room, small: fit < o.minFont };
+    return { x: pole.x, y: pole.y, size: fs, text, leader: null, crowded: false, room, small: fitFont(text.length, room) < fs };
   });
   // numbers that fit, first: each is inside its own region's largest circle, so none overlap
   for (const l of out) if (!l.small) grid.add(l.x, l.y, halfDiag(l.text.length, l.size));
@@ -143,7 +141,7 @@ export function placeLabels(regions, o) {
   const DIRS = 16;
   for (const i of order) {
     const l = out[i];
-    const fs = o.minFont, r = halfDiag(l.text.length, fs);
+    const r = halfDiag(l.text.length, fs);
     const need = r + lw + 0.1 * fs;
     let found = null;
     const start = Math.max(l.room, 0) + r + lw;
@@ -159,7 +157,6 @@ export function placeLabels(regions, o) {
         found = [x, y];
       }
     }
-    l.size = fs;
     if (found) {
       l.leader = { x: l.x, y: l.y };
       l.x = found[0]; l.y = found[1];

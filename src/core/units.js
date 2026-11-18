@@ -55,17 +55,19 @@ export const DEFAULTS = {
   // the palette (core/palette.js)
   paletteMode: 'auto',   // 'auto': N colors from the image | 'custom': `colors`
   autoN: 16,
+  mergeOn: true,         // auto: merge colors closer than mergeDE, and fill the freed slots
+  mergeDE: 4,            // ΔE (OKLab × 100)
   colors: [],            // [{hex, name}]
   order: 'light',        // numbering: 'light' (lightest is 1) | 'list' (as listed)
+  // the Style chain (core/style.js); null = its default (Painterly on)
+  style: null,
   // the level of detail
-  simplify: 1.5,         // mm, the Kuwahara brush diameter before matching colors; 0 = off
   cleanup: 0.6,          // mm, sigma of the majority smoothing of the color map; 0 = off
   minWidth: 2.5,         // mm, the narrowest a region (or any part of one) may be
   minArea: 10,           // mm², the smallest region
   edgeSmooth: 0.6,       // mm, sigma of the smoothing along each boundary
   // the numbers (core/labels.js)
-  minFont: 1.6,          // mm, the smallest number printed inside a region
-  maxFont: 4,            // mm, the largest
+  fontSize: 2,           // mm, every number's font size (one height for all)
   lineWidth: 0.25,       // mm: numbers keep half of it clear of the line
 };
 

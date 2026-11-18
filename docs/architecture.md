@@ -7,7 +7,8 @@ header explains its reasoning; this page is what holds across modules.
 
 ```
 shim/      image resize, mulberry32 (copied verbatim from Photo2Mosaic)
-core/      units, color, raster (the work grid), palette (k-means, numbering),
+core/      units, color, raster (the work grid), style (the filter chain),
+           palette (k-means, merging, numbering),
            quantize (nearest color, majority clean-up), segment (the detail
            limits), planar (shared boundaries), geom, labels (where numbers
            go), svg, printout, project; and, copied, edt (plus edtNearest),
@@ -61,18 +62,30 @@ harness checks it.
 
 ## Numbers: inside, or outside on a leader
 
-Each number is at its region's pole of inaccessibility (polylabel), sized to fit
-the circle there less half the line. A region whose circle is too small for the
-smallest size keeps its color (the user's choice: small accents are worth
+Every number is ONE size. Each is at its region's pole of inaccessibility
+(polylabel), and fits when its box fits the circle there less half the line. A
+region whose circle is too small keeps its color (the user's choice: small accents are worth
 keeping), and its number is placed at the nearest spot around it with room for
 it (clearance from the work raster) that overlaps no other number. Numbers that
 fit are placed first, so a leader never displaces one. When there is no room at
-all the number stays inside at the smallest size and is counted as crowded.
+all the number stays inside and is counted as crowded.
+
+The printout writes the lines and the numbers as two symbols, so its 1:1 pages
+can be bare lines (the default) while the key's small pattern and the fit page
+always show the numbers.
+
+## The palette from the image
+
+k-means spends clusters where the image has the most pixels, so a dark painting
+gets several near-blacks. With merging on, clusters closer than the limit are
+merged (mass-weighted, in OKLab) and k-means is run again with more clusters
+until merging leaves the N asked for (up to 3N clusters); fewer come back only
+when the image has no more colors that far apart, and a note says so.
 
 ## The stage cache
 
 `pipeline.js` runs four stages (A raster and pre-filter, B palette and regions,
-C shapes, D numbers). Each remembers the JSON of the settings it was made from,
+C shapes, D numbers; the Style chain is part of A). Each remembers the JSON of the settings it was made from,
 including the earlier stages' keys; the worker keeps the cache between runs. A
 change to the number sizes re-runs only D (0.1 s against 3.4 s for the Mona Lisa
 at Normal). The harness checks a cached run equals a fresh one. The image is

@@ -5,6 +5,7 @@ import { patternSVG, paintedSVG, inkHex } from '../src/core/svg.js';
 import { planHTML, pageWindows, OVERLAP } from '../src/core/printout.js';
 import { projectJSON, parseProject } from '../src/core/project.js';
 import { DEFAULTS } from '../src/core/units.js';
+import { defaultStyle } from '../src/core/style.js';
 
 export function run() {
   section('core.output', 'The pattern and painted SVGs, the printable page, and project files. Predictions: the SVGs are true size in mm with every boundary drawn once; the 1:1 pages overlap and cover the pattern; a project round-trips its settings and refuses what is not one.');
@@ -34,9 +35,15 @@ export function run() {
   const pages = (html.match(/class="page"/g) || []).length;
   const win = pageWindows(W, H, 190, 297 - 20 - 9 - 8);
   check('the printout has the summary, the fit page and every 1:1 page', pages === 2 + win.windows.length, `${pages} pages`);
-  check('the pattern is written once and shown through &lt;use&gt;', (html.match(/id="pbn-pattern"/g) || []).length === 1 && html.includes('href="#pbn-pattern"'));
+  check('the pattern is written once and shown through &lt;use&gt;', (html.match(/id="pbn-lines"/g) || []).length === 1 && (html.match(/id="pbn-numbers"/g) || []).length === 1);
+  const pageUses = (h) => h.split('class="page"').slice(1).map((pg) => pg.includes('#pbn-numbers'));
+  const off = pageUses(html), on = pageUses(planHTML(plan, { paper: 'a4', fit: true, numbers1to1: true }));
+  check('by default the 1:1 pages have no numbers; the summary and fit page do', off[0] && off[1] && off.slice(2).every((v) => !v), off.join());
+  check('asked for, the 1:1 pages have them too', on.every((v) => v), on.join());
 
-  const s = { ...DEFAULTS, paletteMode: 'custom', colors: [{ hex: '#112233', name: 'navy' }], minWidth: 3.3, order: 'list' };
+  const style = defaultStyle();
+  style.on.median = true; style.params.median.radius = 1.2; style.order.reverse();
+  const s = { ...DEFAULTS, paletteMode: 'custom', colors: [{ hex: '#112233', name: 'navy' }], minWidth: 3.3, order: 'list', mergeOn: false, style };
   const text = projectJSON({ image: { kind: 'sample', name: 'rings' }, units: 'in', settings: s, display: { lineDark: 0.3, numDark: 0.9, numbers: false, coverage: 2 } });
   const back = parseProject(text);
   check('a project round-trips', back.problems.length === 0 && JSON.stringify(back.project.settings) === JSON.stringify(s) &&

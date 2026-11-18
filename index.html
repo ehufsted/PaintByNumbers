@@ -108,6 +108,12 @@
   table.key td:nth-child(-n+3) { text-align: left; }
   table.key tr.off td { opacity: .45; }
   table.key tr.hot td { background: #ababff30; }
+  /* the Style chain: one card per filter */
+  .fcard { border: 1px solid #ffffff22; border-radius: 5px; padding: 4px 8px; margin: 6px 0; }
+  .fcard.on { border-color: var(--line); }
+  .fcard .fhead { display: flex; align-items: center; gap: 6px; }
+  .fcard .fhead label.check { flex: 1 1 auto; margin: 2px 0; color: var(--text); }
+  .fcard .fbody[hidden] { display: none; }
   .sw { display: inline-block; width: 14px; height: 14px; border: 1px solid #0008; border-radius: 2px; vertical-align: middle; }
 
   section.preview {
@@ -225,6 +231,14 @@
     </details>
 
     <details open>
+      <summary>Style</summary>
+      <div class="body">
+        <div id="styleChain"></div>
+        <p class="note">Filters applied to the image, top to bottom, before its colors are matched. Tick to use; ↑ ↓ to change the order.</p>
+      </div>
+    </details>
+
+    <details open>
       <summary>Canvas</summary>
       <div class="body">
         <div class="row">
@@ -277,6 +291,11 @@
             <input type="range" id="autoN" min="2" max="40" step="1" value="16">
             <span class="val" id="autoNVal">16</span>
           </div>
+          <div class="row" title="k-means spends colors where the image has the most pixels; colors closer than this are merged, and the freed slots go to colors you can tell apart">
+            <label class="check" style="flex:0 0 auto"><input type="checkbox" id="mergeOn" checked> Merge colors closer than</label>
+            <input type="number" id="mergeDE" min="0.5" max="30" step="0.5" value="4">
+            <span class="unit">ΔE</span>
+          </div>
           <div class="autopal" id="autoPal"></div>
           <div class="buttons">
             <button id="editAuto" title="copy these colors into My colors, to edit, rename or match to your paints">Edit these colors…</button>
@@ -319,11 +338,6 @@
             <button data-detail="coarse" aria-pressed="false">Coarse</button>
           </div>
         </div>
-        <div class="row" title="an edge-preserving smoothing of the image (Kuwahara) before colors are matched: flattens texture into patches; 0 = off">
-          <label for="simplify">Simplify image</label>
-          <input type="number" id="simplify" class="len" min="0" step="any">
-          <span class="unit u"></span>
-        </div>
         <div class="row" title="each pixel takes the color most common around it, within about this distance: removes speckle and rounds jagged edges; 0 = off">
           <label for="cleanup">Clean-up</label>
           <input type="number" id="cleanup" class="len" min="0" step="any">
@@ -344,7 +358,7 @@
           <input type="number" id="edgeSmooth" class="len" min="0" step="any">
           <span class="unit u"></span>
         </div>
-        <p class="note">All lengths are on the canvas. Narrowest and Smallest region are what a brush can paint and a number can fit in.</p>
+        <p class="note">All lengths are on the canvas. Narrowest and Smallest region are what a brush can paint and a number can fit in. A preset also sets the Painterly brush in Style.</p>
       </div>
     </details>
 
@@ -367,14 +381,9 @@
           <span class="val" id="numDarkVal">60%</span>
         </div>
         <label class="check"><input type="checkbox" id="numbers" checked> Numbers</label>
-        <div class="row" title="the smallest number printed inside a region; a region too small for it gets its number outside, on a leader line">
-          <label for="minFont">Smallest number</label>
-          <input type="number" id="minFont" class="len" min="0" step="any">
-          <span class="unit u"></span>
-        </div>
-        <div class="row">
-          <label for="maxFont">Largest number</label>
-          <input type="number" id="maxFont" class="len" min="0" step="any">
+        <div class="row" title="every number's font size; a region too small for a number gets it outside, on a leader line">
+          <label for="fontSize">Number size</label>
+          <input type="number" id="fontSize" class="len" min="0" step="any">
           <span class="unit u"></span>
         </div>
         <p class="note" id="fontNote"></p>
@@ -468,6 +477,7 @@
   <label class="check"><input type="checkbox" id="pSummary" checked> Color key and preview</label>
   <label class="check"><input type="checkbox" id="pFit" checked> Whole pattern, scaled to one page</label>
   <label class="check"><input type="checkbox" id="pPattern" checked> Pattern at 1:1 (split across pages if needed)</label>
+  <label class="check" style="margin-left:22px" title="the color key's small pattern and the scaled-to-fit page always have the numbers"><input type="checkbox" id="pNumbers"> Print numbers on 1:1 pattern?</label>
   <p class="note" id="printNote"></p>
   <div class="buttons"><button class="primary" id="printGo">Open printable page</button><button id="printClose">Cancel</button></div>
 </dialog>

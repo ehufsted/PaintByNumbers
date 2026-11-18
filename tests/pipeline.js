@@ -8,7 +8,7 @@ export function run() {
   section('pipeline', 'The whole chain on the sphere and rings samples. Predictions: the regions tile the canvas; every region has a number, inside it or on a leader whose dot is inside it; regions meet the area limit (to within what the edge smoothing moves); the same input gives the same plan, with or without the stage cache.');
   const sphere = generateSample('sphere').color;
   const rings = generateSample('rings').color;
-  const base = { widthMm: 200, precision: 'draft', autoN: 10, simplify: 1.5, minWidth: 2.5, minArea: 10, edgeSmooth: 0.6, minFont: 1.6, maxFont: 4 };
+  const base = { widthMm: 200, precision: 'draft', autoN: 10, minWidth: 2.5, minArea: 10, edgeSmooth: 0.6, fontSize: 1.8 };
   for (const [name, img] of [['sphere', sphere], ['rings', rings]]) {
     const plan = runPipeline(img, base);
     const { W, H } = plan.piece;
@@ -35,7 +35,7 @@ export function run() {
     check(`${name}: every number (or its leader dot) is in its region`, outside === 0, `${outside} of ${r.length}; ${plan.stats.leaders} leaders, ${plan.stats.crowded} crowded`);
     check(`${name}: no region under 80% of the area limit`, small === 0, `smallest ${num(plan.stats.smallest, 2)} mm² (limit ${base.minArea})`);
     check(`${name}: no two numbers overlap`, overlap === 0, `${overlap} pairs`);
-    check(`${name}: numbers within the size range`, ls.every((l) => l.size >= base.minFont - 1e-9 && l.size <= base.maxFont + 1e-9));
+    check(`${name}: every number is the one size`, ls.every((l) => l.size === base.fontSize));
     check(`${name}: palette numbered light to dark`, plan.palette.every((p, i) => p.num === i + 1));
     say(`<p class="note">${name}: ${plan.regions.length} regions, ${plan.stats.colors} colors, mean ΔE ${num(plan.stats.meanDE, 2)}, ${plan.chains.length} chains</p>`);
   }
@@ -45,8 +45,8 @@ export function run() {
   check('the same input gives the same plan', JSON.stringify(a) === JSON.stringify(b));
   const cache = {};
   runPipeline(sphere, base, { cache, imageKey: 1 });
-  const viaCache = runPipeline(sphere, { ...base, minFont: 2.2 }, { cache, imageKey: 1 });
-  const fresh = runPipeline(sphere, { ...base, minFont: 2.2 });
+  const viaCache = runPipeline(sphere, { ...base, fontSize: 2.4 }, { cache, imageKey: 1 });
+  const fresh = runPipeline(sphere, { ...base, fontSize: 2.4 });
   check('a cached run (only the numbers changed) equals a fresh one', JSON.stringify(viaCache) === JSON.stringify(fresh));
   check('and it reused the regions', cache.C && viaCache.regions.length === fresh.regions.length);
 

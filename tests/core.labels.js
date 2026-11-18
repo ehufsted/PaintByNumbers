@@ -10,7 +10,7 @@ const circle = (cx, cy, r, n = 64) => {
 };
 
 export function run() {
-  section('core.labels', 'Where numbers go. Predictions: a square\'s number sits at its centre; a ring\'s in the ring, not the hole; a number fits its region\'s largest circle; a region too small for the smallest number gets it outside, on a leader, clear of every other number.');
+  section('core.labels', 'Where numbers go. Predictions: a square\'s number sits at its centre; a ring\'s in the ring, not the hole; every number is one size; a region too small for it gets it outside, on a leader, clear of every other number.');
   const sq = polylabel([rect(0, 0, 10, 10)], 0.01);
   check('square: the centre, 5 from every side', Math.hypot(sq.x - 5, sq.y - 5) < 0.05 && Math.abs(sq.d - 5) < 0.02, `(${num(sq.x)}, ${num(sq.y)}) d ${num(sq.d)}`);
   const ann = [circle(0, 0, 10), circle(0, 0, 6).reverse()];
@@ -29,9 +29,9 @@ export function run() {
   const bigWithHole = [...big, tiny[0].slice()];
   const regions = [{ rings: bigWithHole, num: 1 }, { rings: tiny, num: 12 }];
   const clearance = (x, y) => Math.min(Math.abs(ringsDist(x, y, big)), Math.abs(ringsDist(x, y, tiny)));
-  const o = { minFont: 2, maxFont: 5, lineWidth: 0.3, W: 60, H: 40, clearance };
+  const o = { fontSize: 2, lineWidth: 0.3, W: 60, H: 40, clearance };
   const ls = placeLabels(regions, o);
-  check('the big region gets the largest size', ls[0].size === 5 && !ls[0].leader, `size ${num(ls[0].size)}`);
+  check('the big region\'s number is inside, at the one size', ls[0].size === 2 && !ls[0].leader, `size ${num(ls[0].size)}`);
   const t = ls[1];
   check('the tiny region gets a leader', !!t.leader && t.size === 2 && !t.crowded);
   if (t.leader) {

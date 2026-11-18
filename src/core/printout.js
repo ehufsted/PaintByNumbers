@@ -9,15 +9,20 @@
 //             OVERLAP mm, each captioned with its place in the grid, to trace
 //             or transfer onto the canvas
 //
-// The pattern is written ONCE, as a hidden <svg> symbol, and every page shows
-// its own window of it through <use>, so a pattern of many pages is not copied
-// once per page.
+// NUMBERS. The summary's small pattern and the fit page always carry the
+// numbers: they are the guide to which color goes where. The 1:1 pages carry
+// them only when asked (opts.numbers1to1): a pattern traced or transferred onto
+// the canvas is often wanted as bare lines, painted from the guide.
+//
+// The pattern is written ONCE, as two hidden <svg> symbols (the lines, and the
+// numbers with their leaders), and every page shows its own window of them
+// through <use>, so a pattern of many pages is not copied once per page.
 //
 // PAGES ARE SIZED IN mm, and the 1:1 pages only stay 1:1 when printed at 100%
 // ("actual size", not "fit to page"); every one carries a 50 mm bar to check that
 // with a ruler. DOM-free: the app adds only the preview image's data URL.
 
-import { patternBody, fmt, escapeXml } from './svg.js';
+import { patternLines, patternNumbers, fmt, escapeXml } from './svg.js';
 import { fromMm } from './units.js';
 
 export const PAPERS = {
@@ -69,8 +74,9 @@ export const paintMl = (mm2, perHundred) => (mm2 / 10000) * perHundred;
 /**
  * @param {object} plan
  * @param {{paper?:string, units?:'mm'|'in', summary?:boolean, fit?:boolean, pattern?:boolean,
- *          previewURL?:string, title?:string, display?:object, coverage?:number}} opts
- *   display: the pattern's look (svg.js PATTERN); coverage: ml of paint per 100 cm²
+ *          numbers1to1?:boolean, previewURL?:string, title?:string, display?:object, coverage?:number}} opts
+ *   display: the pattern's look (svg.js PATTERN; its numbers flag is not used here);
+ *   numbers1to1: numbers on the 1:1 pages too; coverage: ml of paint per 100 cm²
  */
 export function planHTML(plan, opts = {}) {
   const paper = PAPERS[opts.paper] || PAPERS.letter;
@@ -83,8 +89,9 @@ export function planHTML(plan, opts = {}) {
   const pages = [];
   const page = (caption, body) => pages.push(
     `<section class="page"><div class="cap">${escapeXml(caption)}</div><div class="body">${body}</div></section>`);
-  const view = (x0, y0, w, h, css) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="${css}"><use href="#pbn-pattern"/></svg>`;
+  const view = (x0, y0, w, h, css, numbers = true) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="${css}"><use href="#pbn-lines"/>` +
+    `${numbers ? '<use href="#pbn-numbers"/>' : ''}</svg>`;
   const bar = '<svg class="bar" width="70mm" height="6mm" viewBox="0 0 70 6"><path d="M0 3h50M0 1v4M50 1v4" stroke="#000" stroke-width="0.3" fill="none"/>' +
     '<text x="52" y="4.2" font-size="3" font-family="Arial, Helvetica, sans-serif">50 mm</text></svg>';
 
@@ -114,7 +121,7 @@ export function planHTML(plan, opts = {}) {
       const w = wd.x1 - wd.x0, h = wd.y1 - wd.y0;
       const where = pw.windows.length > 1 ? ` · page ${wd.r + 1}-${wd.c + 1} of ${pw.rows} × ${pw.cols} (overlap ${OVERLAP} mm)` : '';
       page(`${title} · pattern at 1:1${where} · top ↑`,
-        view(wd.x0, wd.y0, w, h, `width:${fmt(w)}mm;height:${fmt(h)}mm;outline:0.2mm dashed #bbb`) + bar);
+        view(wd.x0, wd.y0, w, h, `width:${fmt(w)}mm;height:${fmt(h)}mm;outline:0.2mm dashed #bbb`, !!opts.numbers1to1) + bar);
     }
   }
 
@@ -137,7 +144,7 @@ table.key tr.off td { color: #999; }
 .bar { display: block; margin-top: 2mm; }
 @media print { body { background: #fff; } .page { margin: 0; } }
 </style></head><body>
-<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute"><defs><g id="pbn-pattern">${patternBody(plan, display)}</g></defs></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute"><defs><g id="pbn-lines">${patternLines(plan, display)}</g><g id="pbn-numbers">${patternNumbers(plan, display)}</g></defs></svg>
 ${pages.join('\n')}
 </body></html>`;
 }

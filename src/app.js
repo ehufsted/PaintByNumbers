@@ -18,22 +18,24 @@ import { inRings } from './core/geom.js';
 import { patternSVG, paintedSVG, inkHex, leaderStart, downloadFile, FONT } from './core/svg.js';
 import { planHTML, PAPERS, pageWindows, printable, fmtLen, areaText, paintMl } from './core/printout.js';
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
+import { filterById, defaultStyle } from './core/style.js';
 import { generateSample } from './app/samples.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'paintbynumbers.v1';
 
-const LEN_IDS = ['widthMm', 'heightMm', 'simplify', 'cleanup', 'minWidth', 'edgeSmooth', 'lineWidth', 'minFont', 'maxFont'];
+const LEN_IDS = ['widthMm', 'heightMm', 'cleanup', 'minWidth', 'edgeSmooth', 'lineWidth', 'fontSize'];
 const MM2_PER_IN2 = 645.16;
 
-/** The Detail presets, mm (and mm² for the area). */
+/** The Detail presets, mm (and mm² for the area); brush is the Painterly filter's. */
 const DETAIL = {
-  fine: { simplify: 1, cleanup: 0.4, minWidth: 1.8, minArea: 5, edgeSmooth: 0.4 },
-  medium: { simplify: 1.5, cleanup: 0.6, minWidth: 2.5, minArea: 10, edgeSmooth: 0.6 },
-  coarse: { simplify: 2.5, cleanup: 1, minWidth: 4, minArea: 25, edgeSmooth: 1 },
+  fine: { brush: 1, cleanup: 0.4, minWidth: 1.8, minArea: 5, edgeSmooth: 0.4 },
+  medium: { brush: 1.5, cleanup: 0.6, minWidth: 2.5, minArea: 10, edgeSmooth: 0.6 },
+  coarse: { brush: 2.5, cleanup: 1, minWidth: 4, minArea: 25, edgeSmooth: 1 },
 };
+const detailValue = (s, key) => (key === 'brush' ? s.style.params.kuwahara.size : s[key]);
 
-const freshSettings = () => ({ ...DEFAULTS, colors: [] });
+const freshSettings = () => ({ ...DEFAULTS, colors: [], style: defaultStyle() });
 
 const state = {
   rgba: null,           // {width, height, data} as loaded
@@ -136,9 +138,8 @@ function validate(s) {
   if (!(s.widthMm > 0)) return 'enter a width';
   if (!(s.heightMm >= 0)) return 'height must be 0 (from the image) or more';
   if (s.paletteMode === 'custom' && !s.colors.length) return 'add a color to the palette';
-  if (!(s.minFont > 0)) return 'the smallest number needs a size';
-  if (!(s.maxFont >= s.minFont)) return 'the largest number must be at least the smallest';
-  if ([s.simplify, s.cleanup, s.minWidth, s.minArea, s.edgeSmooth, s.lineWidth].some((v) => !(v >= 0))) return 'lengths cannot be negative';
+  if (!(s.fontSize > 0)) return 'the numbers need a size';
+  if ([s.cleanup, s.minWidth, s.minArea, s.edgeSmooth, s.lineWidth].some((v) => !(v >= 0))) return 'lengths cannot be negative';
   return '';
 }
 
@@ -184,13 +185,13 @@ function showLengths() {
 /** Which Detail preset the values match, if any. */
 function showDetailPreset() {
   const s = state.s;
-  const at = Object.keys(DETAIL).find((k) => Object.entries(DETAIL[k]).every(([key, v]) => Math.abs(s[key] - v) < 1e-6));
+  const at = Object.keys(DETAIL).find((k) => Object.entries(DETAIL[k]).every(([key, v]) => Math.abs(detailValue(s, key) - v) < 1e-6));
   for (const b of document.querySelectorAll('#detailSeg button')) b.setAttribute('aria-pressed', String(b.dataset.detail === at));
 }
 
 function updateFontNote() {
   const pt = (mm) => (mm * 72 / 25.4).toFixed(1);
-  $('fontNote').textContent = `Numbers from ${pt(state.s.minFont)} to ${pt(state.s.maxFont)} pt (a digit is about 0.72 of that tall).`;
+  $('fontNote').textContent = `${pt(state.s.fontSize)} pt; a digit is about ${L(0.72 * state.s.fontSize)} ${unitLabel()} tall. Every number is this size.`;
 }
 
 function bindLengths() {
@@ -200,7 +201,7 @@ function bindLengths() {
       if (!isFinite(v)) return;
       state.s[id] = toMm(v, state.units);
       if (id === 'widthMm' || id === 'heightMm') { state.preset = 'custom'; $('preset').value = 'custom'; }
-      if (id === 'minFont' || id === 'maxFont') updateFontNote();
+      if (id === 'fontSize') updateFontNote();
       showDetailPreset();
       scheduleRun();   // every length re-runs (the line width too: numbers keep clear of it)
     });
@@ -216,6 +217,7 @@ function bindLengths() {
     b.addEventListener('click', () => {
       state.units = b.dataset.units;
       showLengths();
+      buildStyleUI();
       updatePieceNote();
       updateStats();
       renderKey();
@@ -224,8 +226,11 @@ function bindLengths() {
   }
   for (const b of document.querySelectorAll('#detailSeg button')) {
     b.addEventListener('click', () => {
-      Object.assign(state.s, DETAIL[b.dataset.detail]);
+      const { brush, ...rest } = DETAIL[b.dataset.detail];
+      Object.assign(state.s, rest);
+      state.s.style.params.kuwahara.size = brush;
       showLengths();
+      buildStyleUI();
       scheduleRun(0);
     });
   }
@@ -344,6 +349,8 @@ function bindPalette() {
   }
   const showN = () => { $('autoNVal').textContent = $('autoN').value; };
   $('autoN').addEventListener('input', () => { state.s.autoN = parseInt($('autoN').value, 10); showN(); scheduleRun(); });
+  $('mergeOn').addEventListener('change', () => { state.s.mergeOn = $('mergeOn').checked; $('mergeDE').disabled = !state.s.mergeOn; scheduleRun(0); });
+  $('mergeDE').addEventListener('input', () => { const v = parseFloat($('mergeDE').value); if (v > 0) { state.s.mergeDE = v; scheduleRun(); } });
   $('editAuto').addEventListener('click', () => {
     if (!state.plan) return;
     copyAutoToCustom();
@@ -631,7 +638,6 @@ function drawProblems(ctx, plan, k) {
   for (const r of plan.regions) {
     if (r.label.crowded) mark(r, '#e0303099');
     else if (r.label.leader) mark(r, '#ff9a1a99');
-    else if (r.label.size <= state.s.minFont * 1.0001) mark(r, '#f2d12e88');
   }
   drawLines(ctx, plan, k, '#555555');
   drawNumbers(ctx, plan, k, '#000000');
@@ -663,7 +669,7 @@ const HINTS = {
   overlay: 'the pattern over the image',
   source: 'the image, where it lies on the canvas',
   diff: 'ΔE between the painted colors and the image: white = on target, amber ≈ 10, dark red = 20 or more',
-  problems: 'orange: number outside on a leader · red: crowded, no room anywhere · yellow: number at the smallest size',
+  problems: 'orange: number outside on a leader · red: crowded, no room anywhere',
 };
 
 function paint() {
@@ -808,13 +814,14 @@ function bindExports() {
     $('printDlg').showModal();
   });
   for (const id of ['paper', 'pSummary', 'pFit', 'pPattern']) $(id).addEventListener('change', updatePrintNote);
+  $('pPattern').addEventListener('change', () => { $('pNumbers').disabled = !$('pPattern').checked; });
   $('printClose').addEventListener('click', () => $('printDlg').close());
   $('printGo').addEventListener('click', () => {
     const plan = state.plan;
     if (!plan) return;
     const html = planHTML(plan, {
       paper: $('paper').value, units: state.units, title: `${state.imageName} — paint by numbers`,
-      summary: $('pSummary').checked, fit: $('pFit').checked, pattern: $('pPattern').checked,
+      summary: $('pSummary').checked, fit: $('pFit').checked, pattern: $('pPattern').checked, numbers1to1: $('pNumbers').checked,
       previewURL: renderPNG(plan, 'painted', 1400), display: look(), coverage: state.disp.coverage,
     });
     const w = window.open('', '_blank');
@@ -949,6 +956,10 @@ function applySettings(units, s, disp) {
   $('precision').value = s.precision;
   $('autoN').value = s.autoN;
   $('autoNVal').textContent = s.autoN;
+  $('mergeOn').checked = s.mergeOn;
+  $('mergeDE').value = s.mergeDE;
+  $('mergeDE').disabled = !s.mergeOn;
+  buildStyleUI();
   $('order').value = s.order;
   setPaletteMode(s.paletteMode);
   renderColors();
@@ -1003,6 +1014,86 @@ function bindProjects() {
       setStatus(`could not open the project: ${err.message}`, 'bad');
     }
   });
+}
+
+// ------------------------------------------------------------------- style
+/**
+ * The Style section: one card per filter, in chain order -- a tick to use it,
+ * up/down to move it, and its own controls while it is on (HalftoneCuttable's).
+ * Built from the filter registry (core/style.js).
+ */
+function buildStyleUI() {
+  const host = $('styleChain');
+  host.innerHTML = '';
+  const { order, on, params } = state.s.style;
+  order.forEach((fid, i) => {
+    const f = filterById(fid);
+    const card = document.createElement('div');
+    card.className = `fcard${on[fid] ? ' on' : ''}`;
+    card.innerHTML = `<div class="fhead"><label class="check"><input type="checkbox" id="style-${fid}"> ${f.label}</label>` +
+      `<button class="mini" data-dir="-1" title="run earlier"${i === 0 ? ' disabled' : ''}>↑</button>` +
+      `<button class="mini" data-dir="1" title="run later"${i === order.length - 1 ? ' disabled' : ''}>↓</button></div>` +
+      '<div class="fbody"><div class="fparams"></div><p class="note"></p></div>';
+    const tick = card.querySelector('input');
+    tick.checked = !!on[fid];
+    tick.addEventListener('change', () => { on[fid] = tick.checked; buildStyleUI(); showDetailPreset(); scheduleRun(0); });
+    for (const b of card.querySelectorAll('button')) {
+      b.addEventListener('click', () => {
+        const j = i + parseInt(b.dataset.dir, 10);
+        [order[i], order[j]] = [order[j], order[i]];
+        buildStyleUI();
+        if (on[order[i]] && on[order[j]]) scheduleRun(0);
+      });
+    }
+    const fbody = card.querySelector('.fbody');
+    fbody.hidden = !on[fid];
+    if (on[fid]) {
+      renderParams(card.querySelector('.fparams'), f.params, params[fid], `style-${fid}`);
+      card.querySelector('.note').textContent = f.blurb;
+    }
+    host.appendChild(card);
+  });
+}
+
+/** Range, select or checkbox controls for a filter's params (as HalftoneCuttable's); mm values show in the units. */
+function renderParams(host, defs, values, prefix) {
+  host.innerHTML = '';
+  for (const p of defs) {
+    const id = `${prefix}-${p.key}`;
+    let el;
+    if (p.type === 'checkbox') {
+      el = document.createElement('label');
+      el.className = 'check';
+      el.innerHTML = `<input type="checkbox" id="${id}"> ${p.label}`;
+      const input = el.querySelector('input');
+      input.checked = !!values[p.key];
+      input.addEventListener('change', () => { values[p.key] = input.checked; scheduleRun(); });
+    } else if (p.type === 'select') {
+      el = document.createElement('div');
+      el.className = 'row';
+      el.innerHTML = `<label for="${id}">${p.label}</label><select id="${id}">` +
+        p.options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('') + '</select>';
+      const input = el.querySelector('select');
+      input.value = values[p.key];
+      input.addEventListener('change', () => { values[p.key] = input.value; scheduleRun(); });
+    } else {
+      el = document.createElement('div');
+      el.className = 'row';
+      el.innerHTML = `<label for="${id}">${p.label}</label>` +
+        `<input type="range" id="${id}" min="${p.min}" max="${p.max}" step="${p.step}"><span class="val"></span>`;
+      const input = el.querySelector('input'), val = el.querySelector('.val');
+      const dp = p.dp ?? (p.step >= 1 ? 0 : 2);
+      const show = () => {
+        const v = Number(input.value);
+        val.textContent = p.unit === 'mm' && state.units === 'in' ? `${(v / 25.4).toFixed(3)} in` : v.toFixed(dp) + (p.unit ? ` ${p.unit}` : '');
+      };
+      input.value = values[p.key];
+      show();
+      input.addEventListener('input', () => { values[p.key] = parseFloat(input.value); show(); showDetailPreset(); scheduleRun(); });
+    }
+    if (p.hint) el.title = p.hint;
+    host.appendChild(el);
+  }
 }
 
 // ------------------------------------------------------------------- misc

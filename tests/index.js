@@ -4,6 +4,7 @@
 import { reset, say, getTally } from './runner.js';
 import * as edt from './core.edt.js';
 import * as palette from './core.palette.js';
+import * as style from './core.style.js';
 import * as quantize from './core.quantize.js';
 import * as segment from './core.segment.js';
 import * as planar from './core.planar.js';
@@ -14,6 +15,7 @@ import * as pipeline from './pipeline.js';
 export const SECTIONS = [
   ['core.edt', edt],
   ['core.palette', palette],
+  ['core.style', style],
   ['core.quantize', quantize],
   ['core.segment', segment],
   ['core.planar', planar],

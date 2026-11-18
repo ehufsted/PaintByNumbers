@@ -1,7 +1,7 @@
 // The whole chain, DOM-free: pixels + settings -> a paint-by-numbers plan.
 // worker.js wraps it; the harness calls it directly.
 //
-//   A  tone -> canvas geometry -> the work raster -> the pre-filter (Kuwahara)
+//   A  tone -> canvas geometry -> the work raster -> the Style chain
 //   B  the palette -> the method's regions (colors, clean-up, detail limits)
 //   C  the planar map -> smoothed shared boundaries -> each region's rings, mm
 //   D  the numbers: where, how big, and leaders
@@ -9,7 +9,7 @@
 // STAGES ARE CACHED (when a cache object is passed, as the worker does): each
 // remembers the settings it was made from, and only a stage whose settings, or
 // an earlier stage's, changed runs again. Moving the number sizes re-runs only
-// D, the edge smoothing C and D.
+// D, the edge smoothing C and D, the palette B to D.
 //
 // THE PLAN is what everything downstream reads (preview, pattern, printout,
 // SVG): geometry in mm and palette numbers, no pixels, so it draws the same at
@@ -25,7 +25,7 @@
 
 import { DEFAULTS, PRECISION, applyTone, pieceGeometry } from './core/units.js';
 import { workRaster, toOKLab } from './core/raster.js';
-import { kuwahara } from './core/kuwahara.js';
+import { applyStyle, chainOf, defaultStyle } from './core/style.js';
 import { autoPalette, numberPalette, closePairs } from './core/palette.js';
 import { planarMap, smoothChains, ringPoints } from './core/planar.js';
 import { boundaryMask } from './core/segment.js';
@@ -33,9 +33,6 @@ import { edt } from './core/edt.js';
 import { ringsArea, ringsBox } from './core/geom.js';
 import { placeLabels } from './core/labels.js';
 import { byId } from './methods/index.js';
-
-/** Kuwahara settings besides the brush size (HalftoneCuttable's defaults). */
-const KUWAHARA = { anisotropy: 1, sharpness: 8 };
 
 /**
  * @param {{width,height,data}} rgba
@@ -60,27 +57,25 @@ export function runPipeline(rgba, settings, opts = {}) {
   };
 
   // A: the work raster
-  const keyA = [opts.imageKey ?? null, s.gamma, s.brightness, s.saturation, s.widthMm, s.heightMm, s.precision, s.simplify];
+  const style = s.style || defaultStyle();
+  const keyA = [opts.imageKey ?? null, s.gamma, s.brightness, s.saturation, s.widthMm, s.heightMm, s.precision, chainOf(style)];
   const A = stage('A', keyA, () => {
     progress('reading the image');
     const toned = applyTone(rgba, s.gamma, s.brightness, s.saturation);
     const geo = pieceGeometry(toned, s);
     const r = workRaster(toned, geo, PRECISION[s.precision] || PRECISION.normal);
-    let filtered = r.rgba;
-    if (s.simplify > 0) {
-      progress('simplifying colors');
-      filtered = kuwahara(r.rgba, { size: s.simplify, ...KUWAHARA }, geo.W);
-    }
+    const filtered = applyStyle(r.rgba, style, geo.W, (label) => progress(`style: ${label}`));
     return { geo, w: r.w, h: r.h, sx: r.sx, sy: r.sy, filtered, labSrc: toOKLab(r.rgba), lab: toOKLab(filtered) };
   });
   const { geo, w, h, sx, sy } = A;
   const px = Math.sqrt(sx * sy);
 
   // B: palette and regions
-  const keyB = [keyA, method.id, s.paletteMode, s.autoN, s.paletteMode === 'custom' ? s.colors : null, s.order, s.cleanup, s.minWidth, s.minArea];
+  const merge = s.paletteMode === 'custom' || !s.mergeOn ? 0 : s.mergeDE;
+  const keyB = [keyA, method.id, s.paletteMode, s.autoN, merge, s.paletteMode === 'custom' ? s.colors : null, s.order, s.cleanup, s.minWidth, s.minArea];
   const B = stage('B', keyB, () => {
     progress('matching colors');
-    const colors = s.paletteMode === 'custom' ? s.colors.map((c) => ({ hex: c.hex, name: c.name || '' })) : autoPalette(A.filtered, s.autoN);
+    const colors = s.paletteMode === 'custom' ? s.colors.map((c) => ({ hex: c.hex, name: c.name || '' })) : autoPalette(A.filtered, s.autoN, 1, merge);
     const pal = numberPalette(colors, s.paletteMode === 'custom' ? s.order : 'light');
     progress('finding regions');
     const seg = method.segment({ lab: A.lab, w, h, pal: pal.map((p) => p.lab), px, s });
@@ -128,7 +123,7 @@ export function runPipeline(rgba, settings, opts = {}) {
   });
 
   // D: numbers
-  const keyD = [keyC, s.minFont, s.maxFont, s.lineWidth];
+  const keyD = [keyC, s.fontSize, s.lineWidth];
   const D = stage('D', keyD, () => {
     progress('placing numbers');
     const clearance = (x, y) => {
@@ -136,7 +131,7 @@ export function runPipeline(rgba, settings, opts = {}) {
       return (C.dB[gy * w + gx] + 0.5) * px;
     };
     return placeLabels(C.regions.map((r) => ({ rings: r.rings, num: pal[r.c].num, seed: r.seed })), {
-      minFont: s.minFont, maxFont: s.maxFont, lineWidth: s.lineWidth, W: geo.W, H: geo.H, clearance,
+      fontSize: s.fontSize, lineWidth: s.lineWidth, W: geo.W, H: geo.H, clearance,
     });
   });
 
@@ -157,8 +152,9 @@ export function runPipeline(rgba, settings, opts = {}) {
   if (unused.length) notes.push(`${unused.length === 1 ? 'color' : 'colors'} ${unused.map((p) => p.num).join(', ')} ${unused.length === 1 ? 'is' : 'are'} not used`);
   const leaders = regions.filter((r) => r.label.leader).length;
   const crowded = regions.filter((r) => r.label.crowded).length;
-  if (leaders) notes.push(`${leaders} ${leaders === 1 ? 'region is' : 'regions are'} too small for a number of the smallest size, and ${leaders === 1 ? 'has its number' : 'have theirs'} outside on a leader line`);
-  if (crowded) notes.push(`${crowded} ${crowded === 1 ? 'number' : 'numbers'} found no room outside either and sit inside at the smallest size (the Problems view shows where)`);
+  if (leaders) notes.push(`${leaders} ${leaders === 1 ? 'region is' : 'regions are'} too small for a number, and ${leaders === 1 ? 'has its number' : 'have theirs'} outside on a leader line`);
+  if (crowded) notes.push(`${crowded} ${crowded === 1 ? 'number' : 'numbers'} found no room outside either and sit inside their regions (the Problems view shows where)`);
+  if (merge > 0 && B.colors.length < s.autoN) notes.push(`${B.colors.length} colors of the ${s.autoN} asked for: the image has no more that are ${merge} ΔE apart`);
   if (s.edgeSmooth / px > sigmaCap + 1e-9) notes.push('edge smoothing held to a quarter of the narrowest region, so neighbouring boundaries cannot cross');
 
   return {
@@ -192,5 +188,5 @@ function validate(s) {
   if (s.paletteMode === 'custom' && !(s.colors && s.colors.length)) throw new Error('the palette has no colors');
   if (s.paletteMode !== 'custom' && !(s.autoN >= 1)) throw new Error('ask for at least one color');
   if (!(s.minWidth >= 0) || !(s.minArea >= 0)) throw new Error('detail limits cannot be negative');
-  if (!(s.minFont > 0) || !(s.maxFont >= s.minFont)) throw new Error('the largest number must be at least the smallest');
+  if (!(s.fontSize > 0)) throw new Error('the numbers need a size');
 }
