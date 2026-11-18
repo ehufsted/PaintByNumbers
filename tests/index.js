@@ -1,0 +1,36 @@
+// The ordered section list. Order is part of the contract: the transcript is
+// diffed between runs, so a reordering reads as a change.
+
+import { reset, say, getTally } from './runner.js';
+import * as edt from './core.edt.js';
+import * as palette from './core.palette.js';
+import * as quantize from './core.quantize.js';
+import * as segment from './core.segment.js';
+import * as planar from './core.planar.js';
+import * as labels from './core.labels.js';
+import * as pipeline from './pipeline.js';
+
+export const SECTIONS = [
+  ['core.edt', edt],
+  ['core.palette', palette],
+  ['core.quantize', quantize],
+  ['core.segment', segment],
+  ['core.planar', planar],
+  ['core.labels', labels],
+  ['pipeline', pipeline],
+];
+
+/** Headless: run every section (or those named) synchronously. */
+export function runAll(only = null) {
+  reset();
+  for (const [name, mod] of SECTIONS) {
+    if (only && !only.includes(name)) continue;
+    mod.run();
+  }
+  summary();
+}
+
+export function summary() {
+  const t = getTally();
+  say(`<h2>Summary</h2><p class="${t.fail ? 'fail' : 'pass'}">${t.pass} passed, ${t.fail} failed</p>`);
+}
