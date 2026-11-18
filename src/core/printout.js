@@ -14,6 +14,11 @@
 // them only when asked (opts.numbers1to1): a pattern traced or transferred onto
 // the canvas is often wanted as bare lines, painted from the guide.
 //
+// INK. The 1:1 pages print in the pattern's own greys (paint has to cover
+// them). The summary's small pattern and the fit page are guides read on
+// paper, so they print in black on white (the inks are CSS variables, set per
+// view).
+//
 // The pattern is written ONCE, as two hidden <svg> symbols (the lines, and the
 // numbers with their leaders), and every page shows its own window of them
 // through <use>, so a pattern of many pages is not copied once per page.
@@ -85,10 +90,11 @@ export function planHTML(plan, opts = {}) {
   const room = printable(paper);
   const title = opts.title || 'Paint by numbers';
   const { W, H } = plan.piece;
-  const display = { ...(opts.display || {}), color: false };
+  const display = { ...(opts.display || {}), color: false, cssVars: true };
   const pages = [];
   const page = (caption, body) => pages.push(
     `<section class="page"><div class="cap">${escapeXml(caption)}</div><div class="body">${body}</div></section>`);
+  const BLACK = '--pbn-line:#000000;--pbn-num:#000000;';
   const view = (x0, y0, w, h, css, numbers = true) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="${css}"><use href="#pbn-lines"/>` +
     `${numbers ? '<use href="#pbn-numbers"/>' : ''}</svg>`;
@@ -106,14 +112,14 @@ export function planHTML(plan, opts = {}) {
     const notes = plan.notes.length ? `<ul class="notes">${plan.notes.map((n) => `<li>${escapeXml(n)}</li>`).join('')}</ul>` : '';
     page(title, `<h1>${escapeXml(title)}</h1>` +
       `<p>Canvas <b>${L(W)} × ${L(H)} ${units}</b> · ${plan.regions.length} regions · ${used.length} colors</p>` +
-      `<div class="two">${prev}${view(0, 0, W, H, 'width:48%;border:0.2mm solid #999')}</div>` +
+      `<div class="two">${prev}${view(0, 0, W, H, `${BLACK}width:48%;border:0.2mm solid #999`)}</div>` +
       `<table class="key"><thead><tr><th>#</th><th></th><th>Name</th><th>Color</th><th class="r">Regions</th><th class="r">Area</th><th class="r">Share</th><th class="r">Paint, ml</th></tr></thead><tbody>${rows}</tbody></table>` +
       `<p class="small">Paint estimate: ${cov} ml per 100 cm², one coat; buy more for a second coat over the lines. ` +
       'Paint light to dark, starting with 1: a darker color covers a lighter slip, not the other way round.</p>' + notes);
   }
   if (opts.fit) {
     const k = Math.min(room.w / W, (room.h + 8) / H);
-    page(`${title} · whole pattern (scaled to fit)`, view(0, 0, W, H, `width:${fmt(W * k)}mm;height:${fmt(H * k)}mm`));
+    page(`${title} · whole pattern (scaled to fit)`, view(0, 0, W, H, `${BLACK}width:${fmt(W * k)}mm;height:${fmt(H * k)}mm`));
   }
   if (opts.pattern !== false) {
     const pw = pageWindows(W, H, room.w, room.h);

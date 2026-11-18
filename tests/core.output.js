@@ -40,6 +40,11 @@ export function run() {
   const off = pageUses(html), on = pageUses(planHTML(plan, { paper: 'a4', fit: true, numbers1to1: true }));
   check('by default the 1:1 pages have no numbers; the summary and fit page do', off[0] && off[1] && off.slice(2).every((v) => !v), off.join());
   check('asked for, the 1:1 pages have them too', on.every((v) => v), on.join());
+  const pg = html.split('class="page"').slice(1);
+  const black = pg.map((p) => p.includes('--pbn-line:#000000;--pbn-num:#000000;'));
+  check('the summary\'s pattern and the fit page print black; the 1:1 pages keep the greys', black[0] && black[1] && black.slice(2).every((v) => !v), black.join());
+  check('the printout\'s inks fall back to the pattern\'s greys', html.includes('stroke:var(--pbn-line,#') && html.includes('fill:var(--pbn-num,#'));
+  check('exported SVGs keep plain color attributes', !svg.includes('var('));
 
   const style = defaultStyle();
   style.on.median = true; style.params.median.radius = 1.2; style.order.reverse();

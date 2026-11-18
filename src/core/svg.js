@@ -50,7 +50,16 @@ export function chainPathD(c) {
 }
 
 /** Pattern display settings, with defaults. */
-export const PATTERN = { lineWidth: 0.25, lineDark: 0.45, numDark: 0.6, numbers: true, color: false };
+export const PATTERN = { lineWidth: 0.25, lineDark: 0.45, numDark: 0.6, numbers: true, color: false, cssVars: false };
+
+/**
+ * An ink color as an SVG attribute. With cssVars (the printout only), it is a
+ * style reading the custom property `name`, the grey as its fallback: custom
+ * properties inherit into <use>, so one copy of the pattern can be shown grey on
+ * the 1:1 pages and black on others. Exported SVGs keep plain attributes, which
+ * every editor reads.
+ */
+const ink = (prop, hex, cssVars, name) => (cssVars ? `style="${prop}:var(${name},${hex})"` : `${prop}="${hex}"`);
 
 /**
  * The pattern's elements (no <svg> wrapper): optional color fills, the boundary
@@ -71,7 +80,7 @@ export function patternLines(plan, o = {}) {
     for (const r of plan.regions) out.push(`<path d="${regionPathD(r.rings)}" fill="${plan.palette[r.c].hex}"/>`);
     out.push('</g>');
   }
-  out.push(`<g id="lines" fill="none" stroke="${inkHex(p.lineDark)}" stroke-width="${fmt(p.lineWidth)}" stroke-linejoin="round" stroke-linecap="round">`);
+  out.push(`<g id="lines" fill="none" ${ink('stroke', inkHex(p.lineDark), p.cssVars, '--pbn-line')} stroke-width="${fmt(p.lineWidth)}" stroke-linejoin="round" stroke-linecap="round">`);
   for (const c of plan.chains) out.push(`<path d="${chainPathD(c)}"/>`);
   out.push('</g>');
   return out.join('\n');
@@ -82,7 +91,8 @@ export function patternNumbers(plan, o = {}) {
   const num = inkHex(p.numDark);
   const out = [];
   const lw = Math.max(0.08, 0.6 * p.lineWidth);
-  out.push(`<g id="leaders" stroke="${num}" stroke-width="${fmt(lw)}" fill="${num}">`);
+  const sty = p.cssVars ? `style="stroke:var(--pbn-num,${num});fill:var(--pbn-num,${num})"` : `stroke="${num}" fill="${num}"`;
+  out.push(`<g id="leaders" ${sty} stroke-width="${fmt(lw)}">`);
   for (const r of plan.regions) {
     const l = r.label;
     if (!l.leader) continue;
@@ -91,7 +101,7 @@ export function patternNumbers(plan, o = {}) {
       `<circle cx="${fmt(l.leader.x)}" cy="${fmt(l.leader.y)}" r="${fmt(Math.max(0.2, 1.2 * lw))}" stroke="none"/>`);
   }
   out.push('</g>');
-  out.push(`<g id="numbers" font-family="${FONT}" text-anchor="middle" dominant-baseline="central" fill="${num}">`);
+  out.push(`<g id="numbers" font-family="${FONT}" text-anchor="middle" dominant-baseline="central" ${ink('fill', num, p.cssVars, '--pbn-num')}>`);
   for (const r of plan.regions) {
     const l = r.label;
     out.push(`<text x="${fmt(l.x)}" y="${fmt(l.y)}" font-size="${fmt(l.size, 2)}">${escapeXml(l.text)}</text>`);
