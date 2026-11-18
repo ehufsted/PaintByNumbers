@@ -472,10 +472,20 @@ function bindPhoto() {
 }
 
 // ---------------------------------------------------------- colors from image
+/**
+ * The same colors "From the image" would give: clustered from the image after
+ * Tone and Style (the worker's last styled raster), merged as set in Palette.
+ * Before the first run there is no styled raster yet, so Tone only.
+ */
 function dialogPalette() {
   if (!state.rgba) return [];
   const n = Math.max(2, Math.min(40, parseInt($('palN').value, 10) || 16));
-  return autoPalette(applyTone(state.rgba, num('gamma'), num('brightness'), num('saturation')), n);
+  let src;
+  if (state.styled) {
+    const c = state.styled;
+    src = { width: c.width, height: c.height, data: c.getContext('2d').getImageData(0, 0, c.width, c.height).data };
+  } else src = applyTone(state.rgba, num('gamma'), num('brightness'), num('saturation'));
+  return autoPalette(src, n, 1, state.s.mergeOn ? state.s.mergeDE : 0);
 }
 
 function renderDialogPalette() {

@@ -14,10 +14,12 @@
 // them only when asked (opts.numbers1to1): a pattern traced or transferred onto
 // the canvas is often wanted as bare lines, painted from the guide.
 //
-// INK. The 1:1 pages print in the pattern's own greys (paint has to cover
-// them). The summary's small pattern and the fit page are guides read on
-// paper, so they print in black on white (the inks are CSS variables, set per
-// view).
+// INK. The 1:1 pages print in the pattern's own greys and sizes (paint has to
+// cover them). The summary's small pattern and the fit page are guides read
+// on paper, so they print in black on white, and since they are scaled down,
+// no line thinner than MIN_LINE and no number smaller than MIN_FONT as printed
+// (numbers in small regions may then overlap their neighbours: on a guide,
+// readable beats tidy). Inks and sizes are CSS variables, set per view.
 //
 // The pattern is written ONCE, as two hidden <svg> symbols (the lines, and the
 // numbers with their leaders), and every page shows its own window of them
@@ -39,6 +41,9 @@ export const PAPERS = {
 const MARGIN = 10;      // mm, all round
 const CAPTION = 9;      // mm reserved at the top of a page for its caption
 export const OVERLAP = 10;
+export const MIN_LINE = 0.15;   // mm on paper, the thinnest line on a scaled view
+export const MIN_FONT = 1.8;    // mm on paper (about 5 pt), the smallest number on a scaled view
+const PREVIEW_H = 120;          // mm, the tallest the summary's pattern may be
 
 /** The printable area of a page, mm: what pattern pages are cut to. */
 export const printable = (paper) => ({ w: paper.w - 2 * MARGIN, h: paper.h - 2 * MARGIN - CAPTION - 8 });
@@ -94,7 +99,11 @@ export function planHTML(plan, opts = {}) {
   const pages = [];
   const page = (caption, body) => pages.push(
     `<section class="page"><div class="cap">${escapeXml(caption)}</div><div class="body">${body}</div></section>`);
-  const BLACK = '--pbn-line:#000000;--pbn-num:#000000;';
+  // a scaled view: black ink, and line and number sizes raised to the minimums at scale k
+  const lw = display.lineWidth ?? 0.25, llw = Math.max(0.08, 0.6 * lw), fs = plan.regions.length ? plan.regions[0].label.size : 2;
+  const scaled = (k) => '--pbn-line:#000000;--pbn-num:#000000;' +
+    `--pbn-lw:${fmt(Math.max(lw, MIN_LINE / k))};--pbn-llw:${fmt(Math.max(llw, (0.6 * MIN_LINE) / k))};` +
+    `--pbn-dot:${fmt(Math.max(0.2, 1.2 * llw, (1.2 * 0.6 * MIN_LINE) / k))};--pbn-fs:${fmt(Math.max(fs, MIN_FONT / k), 2)};`;
   const view = (x0, y0, w, h, css, numbers = true) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="${css}"><use href="#pbn-lines"/>` +
     `${numbers ? '<use href="#pbn-numbers"/>' : ''}</svg>`;
@@ -109,17 +118,19 @@ export function planHTML(plan, opts = {}) {
       `<td class="r">${p.regions}</td><td class="r">${areaText(p.area, units)}</td>` +
       `<td class="r">${((100 * p.area) / (W * H)).toFixed(1)}%</td><td class="r">${p.used ? paintMl(p.area, cov).toFixed(1) : '—'}</td></tr>`).join('');
     const prev = opts.previewURL ? `<img class="preview" src="${opts.previewURL}" alt="painted preview">` : '';
+    // the small pattern: half the page wide, at most PREVIEW_H tall
+    const ks = Math.min((0.48 * room.w) / W, PREVIEW_H / H);
     const notes = plan.notes.length ? `<ul class="notes">${plan.notes.map((n) => `<li>${escapeXml(n)}</li>`).join('')}</ul>` : '';
     page(title, `<h1>${escapeXml(title)}</h1>` +
       `<p>Canvas <b>${L(W)} × ${L(H)} ${units}</b> · ${plan.regions.length} regions · ${used.length} colors</p>` +
-      `<div class="two">${prev}${view(0, 0, W, H, `${BLACK}width:48%;border:0.2mm solid #999`)}</div>` +
+      `<div class="two">${prev}${view(0, 0, W, H, `${scaled(ks)}width:${fmt(W * ks)}mm;height:${fmt(H * ks)}mm;border:0.2mm solid #999`)}</div>` +
       `<table class="key"><thead><tr><th>#</th><th></th><th>Name</th><th>Color</th><th class="r">Regions</th><th class="r">Area</th><th class="r">Share</th><th class="r">Paint, ml</th></tr></thead><tbody>${rows}</tbody></table>` +
       `<p class="small">Paint estimate: ${cov} ml per 100 cm², one coat; buy more for a second coat over the lines. ` +
       'Paint light to dark, starting with 1: a darker color covers a lighter slip, not the other way round.</p>' + notes);
   }
   if (opts.fit) {
     const k = Math.min(room.w / W, (room.h + 8) / H);
-    page(`${title} · whole pattern (scaled to fit)`, view(0, 0, W, H, `${BLACK}width:${fmt(W * k)}mm;height:${fmt(H * k)}mm`));
+    page(`${title} · whole pattern (scaled to fit)`, view(0, 0, W, H, `${scaled(k)}width:${fmt(W * k)}mm;height:${fmt(H * k)}mm`));
   }
   if (opts.pattern !== false) {
     const pw = pageWindows(W, H, room.w, room.h);
@@ -139,7 +150,7 @@ body { margin: 0; font: 10pt/1.35 Arial, Helvetica, sans-serif; color: #000; bac
 .cap { height: ${CAPTION}mm; font-size: 8pt; color: #444; }
 h1 { font-size: 15pt; margin: 0 0 2mm; }
 .two { display: flex; gap: 4%; align-items: flex-start; margin: 3mm 0; }
-.preview { width: 48%; border: 0.2mm solid #999; }
+.preview { width: 48%; max-height: ${PREVIEW_H}mm; object-fit: contain; object-position: left top; border: 0.2mm solid #999; }
 table.key { border-collapse: collapse; width: 100%; font-size: 9pt; }
 table.key th { text-align: left; font-weight: normal; color: #555; border-bottom: 0.3mm solid #000; padding: 1mm; }
 table.key td { padding: 0.8mm 1mm; border-bottom: 0.1mm solid #ccc; }

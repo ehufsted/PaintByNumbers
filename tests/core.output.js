@@ -2,7 +2,7 @@
 import { runPipeline } from '../src/pipeline.js';
 import { generateSample } from '../src/app/samples.js';
 import { patternSVG, paintedSVG, inkHex } from '../src/core/svg.js';
-import { planHTML, pageWindows, OVERLAP } from '../src/core/printout.js';
+import { planHTML, pageWindows, OVERLAP, printable, PAPERS, MIN_LINE, MIN_FONT } from '../src/core/printout.js';
 import { projectJSON, parseProject } from '../src/core/project.js';
 import { DEFAULTS } from '../src/core/units.js';
 import { defaultStyle } from '../src/core/style.js';
@@ -45,6 +45,14 @@ export function run() {
   check('the summary\'s pattern and the fit page print black; the 1:1 pages keep the greys', black[0] && black[1] && black.slice(2).every((v) => !v), black.join());
   check('the printout\'s inks fall back to the pattern\'s greys', html.includes('stroke:var(--pbn-line,#') && html.includes('fill:var(--pbn-num,#'));
   check('exported SVGs keep plain color attributes', !svg.includes('var('));
+  // the fit page's scale, and the sizes it asks for
+  const room = printable(PAPERS.a4), k = Math.min(room.w / W, (room.h + 8) / H);
+  const fitStyle = pg[1].match(/style="(--pbn-line[^"]*)"/)[1];
+  const v = (name) => parseFloat(fitStyle.match(new RegExp(`${name}:([0-9.]+)`))[1]);
+  check('the fit page: lines at least MIN_LINE and numbers at least MIN_FONT as printed',
+    v('--pbn-lw') * k >= MIN_LINE - 1e-3 && v('--pbn-fs') * k >= MIN_FONT - 1e-2 && v('--pbn-fs') >= plan.regions[0].label.size,
+    `line ${num(v('--pbn-lw') * k)} mm, number ${num(v('--pbn-fs') * k)} mm on paper (scale ${num(k)})`);
+  check('the printout sets the number size once, on the group', !/<text [^>]*font-size/.test(html.split('id="pbn-numbers"')[1].split('</defs>')[0]) && html.includes('font-size:calc(var(--pbn-fs,'));
 
   const style = defaultStyle();
   style.on.median = true; style.params.median.radius = 1.2; style.order.reverse();

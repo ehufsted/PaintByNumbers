@@ -53,13 +53,17 @@ export function chainPathD(c) {
 export const PATTERN = { lineWidth: 0.25, lineDark: 0.45, numDark: 0.6, numbers: true, color: false, cssVars: false };
 
 /**
- * An ink color as an SVG attribute. With cssVars (the printout only), it is a
- * style reading the custom property `name`, the grey as its fallback: custom
- * properties inherit into <use>, so one copy of the pattern can be shown grey on
- * the 1:1 pages and black on others. Exported SVGs keep plain attributes, which
- * every editor reads.
+ * Presentation as SVG attributes: [prop, value, custom property] triples. With
+ * cssVars (the printout only) they become one style reading each custom
+ * property, the value as its fallback: custom properties inherit into <use>, so
+ * one copy of the pattern can be shown grey at its own sizes on the 1:1 pages
+ * and black, with a floor on line width and number size, on the scaled views.
+ * Lengths (`px` true) are user units, so the style multiplies by 1px (one user
+ * unit). Exported SVGs keep plain attributes, which every editor reads.
  */
-const ink = (prop, hex, cssVars, name) => (cssVars ? `style="${prop}:var(${name},${hex})"` : `${prop}="${hex}"`);
+const attrs = (cssVars, list) => (cssVars
+  ? `style="${list.map(([prop, v, name, px]) => (px ? `${prop}:calc(var(${name},${v})*1px)` : `${prop}:var(${name},${v})`)).join(';')}"`
+  : list.map(([prop, v]) => `${prop}="${v}"`).join(' '));
 
 /**
  * The pattern's elements (no <svg> wrapper): optional color fills, the boundary
@@ -80,7 +84,8 @@ export function patternLines(plan, o = {}) {
     for (const r of plan.regions) out.push(`<path d="${regionPathD(r.rings)}" fill="${plan.palette[r.c].hex}"/>`);
     out.push('</g>');
   }
-  out.push(`<g id="lines" fill="none" ${ink('stroke', inkHex(p.lineDark), p.cssVars, '--pbn-line')} stroke-width="${fmt(p.lineWidth)}" stroke-linejoin="round" stroke-linecap="round">`);
+  const a = attrs(p.cssVars, [['stroke', inkHex(p.lineDark), '--pbn-line'], ['stroke-width', fmt(p.lineWidth), '--pbn-lw', true]]);
+  out.push(`<g id="lines" fill="none" ${a} stroke-linejoin="round" stroke-linecap="round">`);
   for (const c of plan.chains) out.push(`<path d="${chainPathD(c)}"/>`);
   out.push('</g>');
   return out.join('\n');
@@ -91,20 +96,26 @@ export function patternNumbers(plan, o = {}) {
   const num = inkHex(p.numDark);
   const out = [];
   const lw = Math.max(0.08, 0.6 * p.lineWidth);
-  const sty = p.cssVars ? `style="stroke:var(--pbn-num,${num});fill:var(--pbn-num,${num})"` : `stroke="${num}" fill="${num}"`;
-  out.push(`<g id="leaders" ${sty} stroke-width="${fmt(lw)}">`);
+  const dot = Math.max(0.2, 1.2 * lw);
+  out.push(`<g id="leaders" ${attrs(p.cssVars, [['stroke', num, '--pbn-num'], ['fill', num, '--pbn-num'], ['stroke-width', fmt(lw), '--pbn-llw', true]])}>`);
   for (const r of plan.regions) {
     const l = r.label;
     if (!l.leader) continue;
     const [x0, y0] = leaderStart(l);
     out.push(`<path d="M${fmt(x0)} ${fmt(y0)}L${fmt(l.leader.x)} ${fmt(l.leader.y)}"/>`,
-      `<circle cx="${fmt(l.leader.x)}" cy="${fmt(l.leader.y)}" r="${fmt(Math.max(0.2, 1.2 * lw))}" stroke="none"/>`);
+      `<circle cx="${fmt(l.leader.x)}" cy="${fmt(l.leader.y)}" ${attrs(p.cssVars, [['r', fmt(dot), '--pbn-dot', true]])} stroke="none"/>`);
   }
   out.push('</g>');
-  out.push(`<g id="numbers" font-family="${FONT}" text-anchor="middle" dominant-baseline="central" ${ink('fill', num, p.cssVars, '--pbn-num')}>`);
+  // every number is one size (core/labels.js), so with cssVars it is set once,
+  // on the group, where a view can raise it
+  const fs = plan.regions.length ? plan.regions[0].label.size : 2;
+  const uniform = p.cssVars && plan.regions.every((r) => r.label.size === fs);
+  const grp = uniform ? attrs(true, [['fill', num, '--pbn-num'], ['font-size', fmt(fs, 2), '--pbn-fs', true]]) : attrs(p.cssVars, [['fill', num, '--pbn-num']]);
+  out.push(`<g id="numbers" font-family="${FONT}" text-anchor="middle" dominant-baseline="central" ${grp}>`);
   for (const r of plan.regions) {
     const l = r.label;
-    out.push(`<text x="${fmt(l.x)}" y="${fmt(l.y)}" font-size="${fmt(l.size, 2)}">${escapeXml(l.text)}</text>`);
+    const size = uniform ? '' : ` font-size="${fmt(l.size, 2)}"`;
+    out.push(`<text x="${fmt(l.x)}" y="${fmt(l.y)}"${size}>${escapeXml(l.text)}</text>`);
   }
   out.push('</g>');
   return out.join('\n');
