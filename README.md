@@ -48,7 +48,8 @@ be served over HTTP, not opened as a file.)
 ## Views
 
 **Painted** (every region in its color), **Pattern** (as it prints),
-**Overlay** (the pattern over the image), **Source**, **Difference** (ΔE between
+**Overlay** (the pattern over the image), **Source** (the image after Tone and
+Style, as its colors are matched), **Difference** (ΔE between
 the painted colors and the image: white on target, amber about 10, dark red 20
 or more) and **Problems** (orange: a number outside on a leader; red: crowded,
 no room even outside). Hover a region to

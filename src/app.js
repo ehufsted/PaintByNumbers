@@ -43,7 +43,8 @@ const state = {
   imageSrc: null,       // for projects: {kind:'sample', name} | {kind:'file', name, dataURL}
   imageKey: 0,          // a new number per image, so the worker's cache never mixes two
   workerHas: null,      // the imageKey the worker holds
-  toned: null,          // canvas of the toned image, for the Source and Overlay views
+  toned: null,          // canvas of the toned image, for the Difference view (and until a run sends `styled`)
+  styled: null,         // canvas of the work raster after Tone and Style, for the Source and Overlay views; it covers the canvas exactly
   units: 'mm',
   preset: 'custom',
   s: freshSettings(),   // the pipeline's settings, mm
@@ -119,6 +120,12 @@ function onWorkerMessage(ev) {
   if (msg.type === 'done') {
     state.pending = false;
     state.plan = msg.plan;
+    if (msg.styled) {
+      const c = document.createElement('canvas');
+      c.width = msg.styled.width; c.height = msg.styled.height;
+      c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(msg.styled.data), c.width, c.height), 0, 0);
+      state.styled = c;
+    }
     state.hitGrid = buildHit(msg.plan);
     if (state.selColor >= msg.plan.palette.length) state.selColor = -1;
     setStatus(`ready · ${(msg.ms / 1000).toFixed(1)} s`);
@@ -559,11 +566,17 @@ function drawPainted(ctx, plan, k) {
   }
 }
 
-function drawSource(ctx, plan) {
+/**
+ * The image under the design. `styled` (the default): after Tone and the Style
+ * chain, as its colors are matched; otherwise after Tone only, the image the
+ * Difference view and the ΔE figures compare against.
+ */
+function drawSource(ctx, plan, styled = true) {
   const R = plan.imageRect;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, plan.piece.W, plan.piece.H);
-  if (state.toned) ctx.drawImage(state.toned, R.x, R.y, R.w, R.h);
+  if (styled && state.styled) ctx.drawImage(state.styled, 0, 0, plan.piece.W, plan.piece.H);
+  else if (state.toned) ctx.drawImage(state.toned, R.x, R.y, R.w, R.h);
 }
 
 /** Lines, then numbers and leaders, as the pattern prints them. */
@@ -603,7 +616,7 @@ function drawDiff(ctx, plan, k) {
   const c = ctx.canvas, w = c.width, h = c.height;
   drawPainted(ctx, plan, k);
   const a = ctx.getImageData(0, 0, w, h).data;
-  drawSource(ctx, plan);
+  drawSource(ctx, plan, false);
   const img = ctx.getImageData(0, 0, w, h);
   const b = img.data;
   for (let i = 0; i < w * h; i++) {
@@ -667,8 +680,8 @@ const HINTS = {
   painted: 'the design painted: every region in its color',
   pattern: 'the printable pattern: lines and numbers, as they print',
   overlay: 'the pattern over the image',
-  source: 'the image, where it lies on the canvas',
-  diff: 'ΔE between the painted colors and the image: white = on target, amber ≈ 10, dark red = 20 or more',
+  source: 'the image after Tone and Style, as its colors are matched',
+  diff: 'ΔE between the painted colors and the image (after Tone, before Style): white = on target, amber ≈ 10, dark red = 20 or more',
   problems: 'orange: number outside on a leader · red: crowded, no room anywhere',
 };
 
@@ -879,6 +892,7 @@ function setImage(rgba, name, src) {
   state.imageName = name;
   state.imageSrc = src;
   state.imageKey++;
+  state.styled = null;
   state.selColor = -1;
   if (state.preset !== 'custom') { applyPreset(); showLengths(); }
   updateToned();
