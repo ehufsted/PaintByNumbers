@@ -37,7 +37,8 @@ const DETAIL = {
 };
 const detailValue = (s, key) => (key === 'brush' ? s.style.params.kuwahara.size : s[key]);
 
-const freshSettings = () => ({ ...DEFAULTS, colors: [], style: defaultStyle() });
+// fresh arrays every time: Reset must never hand out DEFAULTS' own (edits are pushed into in place)
+const freshSettings = () => ({ ...DEFAULTS, colors: [], edits: [], style: defaultStyle() });
 
 /** The edit tools' state (the edits themselves are state.s.edits). */
 const edit = { tool: 'off', hex: null, mergeFrom: null, brushMm: 3, redo: [], stroke: null, brushClick: false };
@@ -62,6 +63,7 @@ const state = {
   pending: false,
 };
 window.paintByNumbers = state;   // for driving the app from DevTools / the CDP harness
+state.edit = edit;               // the edit tools too (not saved: save() keeps s and disp only)
 
 // ------------------------------------------------------------------ persistence
 // Only conveniences live in localStorage: a private window or blocked storage
@@ -136,6 +138,11 @@ function onWorkerMessage(ev) {
       state.styled = c;
     }
     state.hitGrid = buildHit(msg.plan);
+    // a merge waiting for its second click: its region's number in the new plan (or none)
+    if (edit.mergeFrom) {
+      const i = regionAt(edit.mergeFrom.x, edit.mergeFrom.y);
+      if (i < 0) edit.mergeFrom = null; else edit.mergeFrom.i = i;
+    }
     setStatus(`ready · ${(msg.ms / 1000).toFixed(1)} s`);
     paint();
     updateStats();
@@ -1293,7 +1300,9 @@ function bindEdits() {
   $('redoEdit').addEventListener('click', redoEdit);
   $('clearEdits').addEventListener('click', () => {
     if (!state.s.edits.length) return;
-    edit.redo = state.s.edits.slice().reverse().concat(edit.redo);   // Redo brings them back, last first
+    // Redo pops from the end: the cleared edits go on top, first edit last, so Redo
+    // brings them back in their order, then any that were undone before
+    edit.redo = edit.redo.concat(state.s.edits.slice().reverse());
     state.s.edits = [];
     renderEditNote();
     scheduleRun(0);
