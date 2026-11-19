@@ -138,6 +138,7 @@ function onWorkerMessage(ev) {
     renderKey();
     renderAutoPalette();
     renderWarnings();
+    renderTargetNote();
   }
 }
 
@@ -201,6 +202,17 @@ function showDetailPreset() {
   for (const b of document.querySelectorAll('#detailSeg button')) b.setAttribute('aria-pressed', String(b.dataset.detail === at));
 }
 
+/** Aiming for a number of regions: what was reached, and the limits that reached it. */
+function renderTargetNote() {
+  const el = $('targetNote'), plan = state.plan;
+  el.hidden = !state.s.targetOn;
+  if (!state.s.targetOn || !plan || !plan.detail) { el.textContent = 'the limits below set the proportions; their level is found on the next run'; return; }
+  const d = plan.detail;
+  const area = state.units === 'in' ? `${(d.minArea / MM2_PER_IN2).toFixed(4)} in²` : `${d.minArea.toFixed(1)} mm²`;
+  el.textContent = `${plan.stats.regions} regions (aiming for ${state.s.target}): the limits below ×${d.f.toFixed(2)}, ` +
+    `so narrowest ${L(d.minWidth)} ${unitLabel()}, smallest region ${area}, clean-up ${L(d.cleanup)} ${unitLabel()} · ${d.tries} ${d.tries === 1 ? 'try' : 'tries'}`;
+}
+
 function updateFontNote() {
   const pt = (mm) => (mm * 72 / 25.4).toFixed(1);
   $('fontNote').textContent = `${pt(state.s.fontSize)} pt; a digit is about ${L(0.72 * state.s.fontSize)} ${unitLabel()} tall. Every number is this size.`;
@@ -247,6 +259,11 @@ function bindLengths() {
     });
   }
   $('precision').addEventListener('change', () => { state.s.precision = $('precision').value; scheduleRun(0); });
+  $('targetOn').addEventListener('change', () => { state.s.targetOn = $('targetOn').checked; renderTargetNote(); scheduleRun(0); });
+  $('target').addEventListener('input', () => {
+    const v = parseInt($('target').value, 10);
+    if (v >= 1) { state.s.target = v; scheduleRun(400); }
+  });
 }
 
 // ------------------------------------------------------------------ canvas size
@@ -1028,6 +1045,9 @@ function applySettings(units, s, disp) {
   $('autoN').value = s.autoN;
   $('autoNVal').textContent = s.autoN;
   $('mergeOn').checked = s.mergeOn;
+  $('targetOn').checked = s.targetOn;
+  $('target').value = s.target;
+  renderTargetNote();
   $('mergeDE').value = s.mergeDE;
   $('mergeDE').disabled = !s.mergeOn;
   buildStyleUI();

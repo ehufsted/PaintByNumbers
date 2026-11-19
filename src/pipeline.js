@@ -2,7 +2,8 @@
 // worker.js wraps it; the harness calls it directly.
 //
 //   A  tone -> canvas geometry -> the work raster -> the Style chain
-//   B  the palette -> the method's regions (colors, clean-up, detail limits)
+//   B  the palette -> the method's regions (colors, clean-up, detail limits);
+//      aiming for a number of regions, the detail limits are scaled to reach it
 //   C  the planar map -> smoothed shared boundaries -> each region's rings, mm
 //   D  the numbers: where, how big, and leaders
 //
@@ -73,20 +74,25 @@ export function runPipeline(rgba, settings, opts = {}) {
   // B: palette and regions
   const merge = s.paletteMode === 'custom' || !s.mergeOn ? 0 : s.mergeDE;
   // the custom colors by hex only: a name changes no region, and is applied at assembly
-  const keyB = [keyA, method.id, s.paletteMode, s.autoN, merge, s.paletteMode === 'custom' ? s.colors.map((c) => c.hex) : null, s.order, s.cleanup, s.minWidth, s.minArea];
+  const keyB = [keyA, method.id, s.paletteMode, s.autoN, merge, s.paletteMode === 'custom' ? s.colors.map((c) => c.hex) : null, s.order, s.cleanup, s.minWidth, s.minArea,
+    s.targetOn ? [s.target, s.edgeSmooth] : null];
   const B = stage('B', keyB, () => {
     progress('matching colors');
     const colors = s.paletteMode === 'custom' ? s.colors.map((c) => ({ hex: c.hex, name: c.name || '' })) : autoPalette(A.filtered, s.autoN, 1, merge);
     const pal = numberPalette(colors, s.paletteMode === 'custom' ? s.order : 'light');
     progress('finding regions');
-    const seg = method.segment({ lab: A.lab, w, h, pal: pal.map((p) => p.lab), px, s });
-    return { colors, pal, seg };
+    const palLab = pal.map((p) => p.lab);
+    const segAt = (f) => method.segment({ lab: A.lab, w, h, pal: palLab, px, s: { ...s, ...scaledDetail(s, f) } });
+    if (!s.targetOn) return { colors, pal, seg: segAt(1), f: 1, tries: 1 };
+    const t = aimFor(segAt, s.target, (f, n) => progress(`aiming for ${s.target} regions: ${n} at ×${f.toFixed(2)}`));
+    return { colors, pal, seg: t.seg, f: t.f, tries: t.tries };
   });
   const { pal, seg } = B;
+  const detail = { f: B.f, tries: B.tries, ...scaledDetail(s, B.f) };
 
   // C: shapes
-  const sigmaCap = 0.25 * (s.minWidth / px);
-  const sigma = Math.min(s.edgeSmooth / px, sigmaCap);
+  const sigmaCap = 0.25 * (detail.minWidth / px);
+  const sigma = Math.min(detail.edgeSmooth / px, sigmaCap);
   const keyC = [keyB, sigma];
   const C = stage('C', keyC, () => {
     progress('tracing boundaries');
@@ -157,13 +163,17 @@ export function runPipeline(rgba, settings, opts = {}) {
   if (leaders) notes.push(`${leaders} ${leaders === 1 ? 'region is' : 'regions are'} too small for a number, and ${leaders === 1 ? 'has its number' : 'have theirs'} outside on a leader line`);
   if (crowded) notes.push(`${crowded} ${crowded === 1 ? 'number' : 'numbers'} found no room outside either and sit inside their regions (the Problems view shows where)`);
   if (merge > 0 && B.colors.length < s.autoN) notes.push(`${B.colors.length} colors of the ${s.autoN} asked for: the image has no more that are ${merge} ΔE apart`);
-  if (s.edgeSmooth / px > sigmaCap + 1e-9) notes.push('edge smoothing held to a quarter of the narrowest region, so neighbouring boundaries cannot cross');
+  if (s.targetOn && Math.abs(seg.count - s.target) > tolerance(s.target)) {
+    notes.push(`${seg.count} regions is as near ${s.target} as the detail limits reach (×${B.f.toFixed(2)})`);
+  }
+  if (detail.edgeSmooth / px > sigmaCap + 1e-9) notes.push('edge smoothing held to a quarter of the narrowest region, so neighbouring boundaries cannot cross');
 
   return {
     method: method.id,
     piece: { W: geo.W, H: geo.H },
     imageRect: geo.imageRect,
     grid: { w, h, sx, sy },
+    detail,
     palette,
     regions,
     chains: C.chains,
@@ -183,6 +193,63 @@ export function runPipeline(rgba, settings, opts = {}) {
 }
 
 const r3 = (v) => Math.round(v * 1000) / 1000;
+
+/** The detail limits scaled by f: lengths by f, the area by f². */
+export const scaledDetail = (s, f) => ({
+  cleanup: s.cleanup * f, minWidth: s.minWidth * f, minArea: s.minArea * f * f, edgeSmooth: s.edgeSmooth * f,
+});
+
+/** How near the target counts as reached: 5%, at least 3 regions. */
+export const tolerance = (target) => Math.max(3, 0.05 * target);
+
+// AIMING FOR A NUMBER OF REGIONS. One factor f scales every detail limit, so
+// the person's values keep their proportions and only the overall level moves.
+// The count falls as f grows, roughly as f^-2 (the area limit goes as f²) but
+// not smoothly: once the narrowest width passes the size of the image's
+// features, many regions merge at once. So the search keeps a BRACKET: the
+// largest f that gave too many regions and the smallest that gave too few.
+// Until it has both ends it steps out by the f^-2 rule (at least ×1.25); then
+// it interpolates in log-log between them, falling back to their geometric
+// midpoint when the interpolation hugs an end (a cliff). It stops within the
+// tolerance, when the bracket is narrower than 2%, or after MAX_TRIES, and uses
+// the trial nearest the target; f stays in [F_MIN, F_MAX], so an unreachable
+// target gets the nearest count (and a note says so).
+const F_MIN = 0.1, F_MAX = 10, MAX_TRIES = 10;
+
+/**
+ * @param {(f:number)=>{count:number}} segAt
+ * @returns {{seg, f:number, tries:number}}
+ */
+export function aimFor(segAt, target, onTry = () => {}) {
+  const tried = [];
+  const tryAt = (f) => {
+    const seg = segAt(f);
+    tried.push({ f, n: seg.count, seg });
+    onTry(f, seg.count);
+    return tried[tried.length - 1];
+  };
+  let t = tryAt(1);
+  while (tried.length < MAX_TRIES && Math.abs(t.n - target) > tolerance(target)) {
+    const many = tried.filter((q) => q.n > target).sort((a, b) => b.f - a.f)[0];   // f too small
+    const few = tried.filter((q) => q.n < target).sort((a, b) => a.f - b.f)[0];    // f too large
+    let next;
+    if (many && few) {
+      const span = Math.log(few.f / many.f);
+      if (span < 0.02) break;
+      const u = Math.log(many.n / target) / Math.log(many.n / Math.max(1, few.n));   // where the target falls, 0..1
+      next = many.f * Math.exp(span * (u > 0.15 && u < 0.85 ? u : 0.5));
+    } else if (many) {
+      if (many.f >= F_MAX) break;
+      next = Math.min(F_MAX, many.f * Math.max(1.25, Math.sqrt(many.n / target)));
+    } else {
+      if (few.f <= F_MIN) break;
+      next = Math.max(F_MIN, few.f / Math.max(1.25, Math.sqrt(target / Math.max(1, few.n))));
+    }
+    t = tryAt(next);
+  }
+  const best = [...tried].sort((a, b) => Math.abs(a.n - target) - Math.abs(b.n - target) || a.f - b.f)[0];
+  return { seg: best.seg, f: best.f, tries: tried.length };
+}
 
 function validate(s) {
   if (!(s.widthMm > 0)) throw new Error('the canvas needs a width');

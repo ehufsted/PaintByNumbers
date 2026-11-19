@@ -28,6 +28,7 @@ const NUMS = {
   saturation: (x) => x >= 0, autoN: (x) => Number.isInteger(x) && x >= 1 && x <= 60, mergeDE: (x) => x >= 0,
   cleanup: (x) => x >= 0, minWidth: (x) => x >= 0, minArea: (x) => x >= 0,
   edgeSmooth: (x) => x >= 0, fontSize: (x) => x > 0, lineWidth: (x) => x >= 0,
+  target: (x) => Number.isInteger(x) && x >= 1,
 };
 
 export const DISPLAY = { lineDark: 0.45, numDark: 0.6, numbers: true, coverage: 1.5, grid: false, gridMm: 25 };
@@ -68,6 +69,7 @@ export function parseProject(json) {
     else problems.push(`${k}: unusable, using ${DEFAULTS[k]}`);
   }
   settings.mergeOn = typeof src.mergeOn === 'boolean' ? src.mergeOn : DEFAULTS.mergeOn;
+  settings.targetOn = typeof src.targetOn === 'boolean' ? src.targetOn : DEFAULTS.targetOn;
   const st = normalizeStyle(src.style);
   settings.style = st.style;
   problems.push(...st.problems);

@@ -66,6 +66,8 @@ export const DEFAULTS = {
   minWidth: 2.5,         // mm, the narrowest a region (or any part of one) may be
   minArea: 10,           // mm², the smallest region
   edgeSmooth: 0.6,       // mm, sigma of the smoothing along each boundary
+  targetOn: false,       // aim for a number of regions: the four values above are scaled together
+  target: 500,           // regions
   // the numbers (core/labels.js)
   fontSize: 2,           // mm, every number's font size (one height for all)
   lineWidth: 0.25,       // mm: numbers keep half of it clear of the line
