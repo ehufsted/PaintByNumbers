@@ -5,7 +5,10 @@
 //   segment(ctx) -> {colors, region, count, thin, merged}
 //                   colors: palette index per grid pixel; region: region id per
 //                   grid pixel (4-connected, one color each)
-//   fill(region) -> {type: 'solid'}   (room for gradient fills later)
+//   group(ctx)   -> {region, count, fills}   optional: regions joined after the
+//                   edits, each with its fill {type:'solid', c} or
+//                   {type:'gradient', c0, c1, x0, y0, x1, y1} (Flat + gradients)
+//   fill(region) -> {type: 'solid'}
 //
 // Everything after the region map (the planar map, the numbers, the plan) is the
 // pipeline's, the same for every method.
@@ -14,8 +17,9 @@
 // HalftoneCuttable and Photo2Mosaic.
 
 import flat from './flat.js';
+import gradient from './gradient.js';
 
-export const METHODS = [flat];
+export const METHODS = [flat, gradient];
 
 export const byId = (id) => METHODS.find((m) => m.id === id) || METHODS[0];
 
