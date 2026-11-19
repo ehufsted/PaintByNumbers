@@ -19,6 +19,7 @@ import { patternSVG, paintedSVG, inkHex, leaderStart, downloadFile, FONT, BASELI
 import { planHTML, PAPERS, pageWindows, printable, fmtLen, areaText, paintMl } from './core/printout.js';
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
+import { COLOR_SETS, colorSet } from './core/colorsets.js';
 import { generateSample } from './app/samples.js';
 
 const $ = (id) => document.getElementById(id);
@@ -367,6 +368,24 @@ function bindPalette() {
     renderColors();
     scheduleRun(0);
   });
+  // predefined sets: they become My colors
+  $('colorSet').innerHTML = COLOR_SETS.map((c) => `<option value="${c.id}">${escapeHtml(c.label)} · ${c.colors.length}</option>`).join('');
+  const useSet = (add) => {
+    const set = COLOR_SETS.find((c) => c.id === $('colorSet').value);
+    if (!set) return;
+    const mine = state.s.paletteMode === 'custom' && state.s.colors.length;
+    if (!add && mine && !window.confirm(`Replace My colors (${state.s.colors.length}) with ${set.label}?`)) return;
+    // Add skips colors already in the list (two sets often share white and black)
+    const have = new Set(mine ? state.s.colors.map((c) => c.hex) : []);
+    const extra = colorSet(set.id).filter((c) => !have.has(c.hex));
+    state.s.colors = add && mine ? [...state.s.colors, ...extra] : colorSet(set.id);
+    setPaletteMode('custom');
+    colorsChanged(true);
+    const skipped = set.colors.length - extra.length;
+    setStatus(add && mine ? `${set.label}: ${extra.length} colors added${skipped ? `, ${skipped} already in the list` : ''}` : `${set.label}: ${set.colors.length} colors in use`);
+  };
+  $('setUse').addEventListener('click', () => useSet(false));
+  $('setAdd').addEventListener('click', () => useSet(true));
   $('addColor').addEventListener('click', () => { state.s.colors.push({ hex: '#808080', name: '' }); colorsChanged(true); });
   $('order').addEventListener('change', () => { state.s.order = $('order').value; colorsChanged(true); });
   $('savePal').addEventListener('click', () => {

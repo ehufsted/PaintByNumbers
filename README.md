@@ -10,7 +10,11 @@ printable pattern with the numbers.
   distinct tones), *Sharpen* (unsharp mask) and *Painterly* (an edge-preserving
   Kuwahara filter that flattens texture into brush-like patches; on by default).
 - **Palette:** *From the image* picks N colors by clustering (k-means in OKLab,
-  seeded, so the same image always gives the same colors). *Merge colors closer
+  seeded, so the same image always gives the same colors). *Color set* puts a predefined set into My colors:
+  minimal (RGB + black and white), painter's primaries (CMY + black and
+  white), the 8- and 16-crayon boxes, greyscale (7 steps, even in lightness),
+  an artist's starter set and earth and skin tones (these two approximate:
+  sample your real paints against them). *Merge colors closer
   than* (on by default, 4 ΔE) merges colors no one could tell apart in a pot and
   gives the freed slots to colors that are distinct. *My colors* is your
   own list: type hex codes, sample them from a photo of your paints, take them
