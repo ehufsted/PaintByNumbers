@@ -76,13 +76,18 @@ export function findGradients(o) {
       if (y < h - 1) add(i, i + w);
     }
   }
+  // why candidates were turned down, for the notes and for tuning
+  const why = { boundaries: pairs.size, smooth: 0, farPaints: 0, threePaints: 0, groups: 0, small: 0, curved: 0, short: 0, worse: 0, room: 0, close: 0, bent: 0 };
   const cand = [];
   for (const [key, [sum, n]] of pairs) {
     const a = Math.floor(key / count), b = key % count;
     const paints = deltaE(pal[colorOf[a]], pal[colorOf[b]]);
-    if (!(paints > 0) || paints > MAX_PAINT_DE) continue;
+    if (!(paints > 0)) continue;
     const jump = sum / n / paints;
-    if (jump < o.blend) cand.push({ a, b, jump });
+    if (jump >= o.blend) continue;
+    why.smooth++;
+    if (paints > MAX_PAINT_DE) { why.farPaints++; continue; }
+    cand.push({ a, b, jump });
   }
   cand.sort((p, q) => p.jump - q.jump || p.a - q.a || p.b - q.b);
 
@@ -94,7 +99,7 @@ export function findGradients(o) {
     const ra = find(a), rb = find(b);
     if (ra === rb) continue;
     const u = new Set([...paintsOf[ra], ...paintsOf[rb]]);
-    if (u.size > 2) continue;
+    if (u.size > 2) { why.threePaints++; continue; }
     parent[rb] = ra;
     paintsOf[ra] = u;
   }
@@ -121,7 +126,8 @@ export function findGradients(o) {
   }
   const accepted = new Map();   // root -> fill
   for (const [r, g] of groups) {
-    if (g.n < o.minArea) continue;
+    why.groups++;
+    if (g.n < o.minArea) { why.small++; continue; }
     const n = g.n, mx = g.sx / n, my = g.sy / n, mt = g.st / n;
     const cxx = g.sxx / n - mx * mx, cxy = g.sxy / n - mx * my, cyy = g.syy / n - my * my;
     const cxt = g.sxt / n - mx * mt, cyt = g.syt / n - my * mt, ctt = g.stt / n - mt * mt;
@@ -130,9 +136,9 @@ export function findGradients(o) {
     const b = (cxt * cyy - cyt * cxy) / det, c = (cyt * cxx - cxt * cxy) / det;
     const r2 = (b * cxt + c * cyt) / ctt;
     const g2 = b * b + c * c;
-    if (!(r2 >= MIN_R2) || !(g2 > 0)) continue;
+    if (!(r2 >= MIN_R2) || !(g2 > 0)) { why.curved++; continue; }
     const span = 1 / Math.sqrt(g2);   // mm from t = 0 to t = 1
-    if (span < MIN_SPAN) continue;
+    if (span < MIN_SPAN) { why.short++; continue; }
     // the ends: where t = 0 and t = 1 on the line through the centroid
     const ux = b / g2, uy = c / g2;
     accepted.set(r, { type: 'gradient', c0: g.c0, c1: g.c1, x0: mx - mt * ux, y0: my - mt * uy, x1: mx + (1 - mt) * ux, y1: my + (1 - mt) * uy, r2,
@@ -149,7 +155,7 @@ export function findGradients(o) {
     f.blendErr += Math.hypot(L - (A[0] + t * (B[0] - A[0])), a - (A[1] + t * (B[1] - A[1])), bb - (A[2] + t * (B[2] - A[2])));
     f.flatErr += Math.hypot(L - F[0], a - F[1], bb - F[2]);
   }
-  for (const [r, f] of accepted) if (f.blendErr > f.flatErr) accepted.delete(r);
+  for (const [r, f] of accepted) if (f.blendErr > f.flatErr) { accepted.delete(r); why.worse++; }
 
   // the new region map: an accepted group is one region, every other region as it was
   const build = () => {
@@ -185,22 +191,24 @@ export function findGradients(o) {
       if (f.type !== 'gradient') return;
       const [[d0, p0], [d1, p1]] = best[id];
       let ok = d0 + 0.5 >= o.room && d1 + 0.5 >= o.room;
+      if (!ok) why.room++;
       const x0 = p0 % w, y0 = Math.floor(p0 / w), x1 = p1 % w, y1 = Math.floor(p1 / w);
       // and far enough apart that the two numbers (and their dashed line) do not touch
-      if (Math.hypot((x1 - x0) * sx, (y1 - y0) * sy) < 2.5 * o.room * Math.sqrt(sx * sy)) ok = false;
+      if (ok && Math.hypot((x1 - x0) * sx, (y1 - y0) * sy) < 2.5 * o.room * Math.sqrt(sx * sy)) { ok = false; why.close++; }
       if (ok) {
         const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0));
         for (let k = 1; k < steps && ok; k++) {
           const x = Math.round(x0 + ((x1 - x0) * k) / steps), y = Math.round(y0 + ((y1 - y0) * k) / steps);
           if (m.out[y * w + x] !== id) ok = false;
         }
+        if (!ok) why.bent++;
       }
       if (!ok) { accepted.delete(m.roots[id]); dropped++; }
     });
     if (dropped) m = build();
   }
   for (const f of m.fills) { delete f.blendErr; delete f.flatErr; }
-  return { region: m.out, count: m.fills.length, fills: m.fills, gradients: accepted.size };
+  return { region: m.out, count: m.fills.length, fills: m.fills, gradients: accepted.size, why };
 }
 
 /** A gradient fill's t at (x, y): 0 at its c0 end, 1 at its c1 end, clamped. */

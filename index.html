@@ -82,6 +82,8 @@
 
   .seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
   .seg button { border: 0; border-radius: 0; padding: 4px 10px; }
+  .seg.wide { flex: 1 1 auto; }
+  .seg.wide button { flex: 1 1 0; padding: 4px 6px; }
   .seg button[aria-pressed=true] { background: var(--accent); color: #10131a; font-weight: 600; }
   label.check { color: var(--dim); display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 6px 0; }
   label.check[hidden] { display: none; }
@@ -387,8 +389,7 @@
       <summary>Edit regions</summary>
       <div class="body">
         <div class="row">
-          <label>Tool</label>
-          <div class="seg" id="editSeg">
+          <div class="seg wide" id="editSeg" title="the edit tool: clicks on the preview recolor, merge or paint while one is on">
             <button data-tool="off" aria-pressed="true">Off</button>
             <button data-tool="recolor" aria-pressed="false">Recolor</button>
             <button data-tool="merge" aria-pressed="false">Merge</button>
