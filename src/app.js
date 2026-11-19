@@ -374,7 +374,6 @@ function bindPalette() {
     const set = COLOR_SETS.find((c) => c.id === $('colorSet').value);
     if (!set) return;
     const mine = state.s.paletteMode === 'custom' && state.s.colors.length;
-    if (!add && mine && !window.confirm(`Replace My colors (${state.s.colors.length}) with ${set.label}?`)) return;
     // Add skips colors already in the list (two sets often share white and black)
     const have = new Set(mine ? state.s.colors.map((c) => c.hex) : []);
     const extra = colorSet(set.id).filter((c) => !have.has(c.hex));
