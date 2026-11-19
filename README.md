@@ -32,9 +32,12 @@ printable pattern with the numbers.
   design has N regions, within 5%. The note shows the limits it used.
 - **Fill:** *Flat color*, or *Flat + gradients*: where the image is a smooth
   blend (a sky, soft shading), neighbouring bands become one region painted as
-  a blend between two colors, numbered with both and a dashed line between
-  them. A blend is kept only where it matches the image at least as well as
-  the bands, its two colors are close, and it has room for both numbers.
+  a blend through up to *Paints per blend* colors in order, straight or round a
+  centre (*Round blends*), numbered with each color and a dashed line through
+  them. *Strictness* (Strict / Normal / Loose) sets how closely a blend must
+  match the image against the bands it replaces, how well it must fit, and how
+  far apart neighbouring paints may be. A blend that does not fit is tried
+  again with one paint fewer, so a long shading becomes several blends.
 - **Edit regions:** *Recolor* (click a region), *Merge* (click a region, then
   the neighbour it joins), *Brush* (drag to paint); Shift-click picks a
   region's color; Undo / Redo (Ctrl+Z / Ctrl+Y) and Clear. Edits are kept as
