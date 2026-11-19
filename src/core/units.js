@@ -66,6 +66,7 @@ export const DEFAULTS = {
   minWidth: 2.5,         // mm, the narrowest a region (or any part of one) may be
   minArea: 10,           // mm², the smallest region
   edgeSmooth: 0.6,       // mm, sigma of the smoothing along each boundary
+  edits: [],             // hand edits to the regions (core/edits.js), in mm
   targetOn: false,       // aim for a number of regions: the four values above are scaled together
   target: 500,           // regions
   // the numbers (core/labels.js)

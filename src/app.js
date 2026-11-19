@@ -39,6 +39,9 @@ const detailValue = (s, key) => (key === 'brush' ? s.style.params.kuwahara.size 
 
 const freshSettings = () => ({ ...DEFAULTS, colors: [], style: defaultStyle() });
 
+/** The edit tools' state (the edits themselves are state.s.edits). */
+const edit = { tool: 'off', hex: null, mergeFrom: null, brushMm: 3, redo: [], stroke: null, brushClick: false };
+
 const state = {
   rgba: null,           // {width, height, data} as loaded
   imageName: 'design',
@@ -65,7 +68,8 @@ window.paintByNumbers = state;   // for driving the app from DevTools / the CDP 
 // just starts from the defaults.
 function save() {
   try {
-    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: state.s, disp: state.disp }));
+    // edits belong to one image, so they are not kept here (a project keeps them)
+    localStorage.setItem(STORE, JSON.stringify({ units: state.units, preset: state.preset, s: { ...state.s, edits: [] }, disp: state.disp }));
   } catch { /* storage unavailable */ }
 }
 
@@ -139,6 +143,8 @@ function onWorkerMessage(ev) {
     renderAutoPalette();
     renderWarnings();
     renderTargetNote();
+    renderEditPalette();
+    renderEditNote();
   }
 }
 
@@ -186,6 +192,7 @@ const unitLabel = () => (state.units === 'in' ? 'in' : 'mm');
 function showLengths() {
   for (const id of LEN_IDS) $(id).value = L(state.s[id]);
   $('gridMm').value = L(state.disp.gridMm);
+  $('brushMm').value = L(edit.brushMm);
   const a = state.units === 'in' ? state.s.minArea / MM2_PER_IN2 : state.s.minArea;
   $('minArea').value = String(Math.round(a * 10000) / 10000);
   $('areaUnit').textContent = state.units === 'in' ? 'in²' : 'mm²';
@@ -742,6 +749,14 @@ function drawView(ctx, plan, view, k) {
     drawGrid(ctx, plan, k);
   } else if (view === 'diff') drawDiff(ctx, plan, k);
   else if (view === 'problems') drawProblems(ctx, plan, k);
+  if (edit.mergeFrom && edit.mergeFrom.i < plan.regions.length) {
+    ctx.save();
+    ctx.strokeStyle = '#00c8ff';
+    ctx.lineWidth = Math.max(0.6, 3 / k);
+    ctx.setLineDash([4 / k, 3 / k]);
+    ctx.stroke(regionPath(plan.regions[edit.mergeFrom.i]));
+    ctx.restore();
+  }
   if (state.selColor >= 0 && view !== 'source' && view !== 'diff') {
     ctx.strokeStyle = '#ff00cc';
     ctx.lineWidth = Math.max(0.5, 2.5 / k);
@@ -820,6 +835,9 @@ function bindHover() {
   canvas.addEventListener('mouseleave', () => { $('hint').textContent = HINTS[state.view] || ''; });
   canvas.addEventListener('click', (e) => {
     if (!state.plan) return;
+    if (edit.brushClick) { edit.brushClick = false; return; }
+    if (edit.tool === 'brush' && !e.shiftKey) return;
+    if (editClick(...at(e), e.shiftKey)) return;
     const i = regionAt(...at(e));
     selectColor(i < 0 ? -1 : state.plan.regions[i].c === state.selColor ? -1 : state.plan.regions[i].c);
   });
@@ -961,7 +979,9 @@ function loadImage(url, maxDim = 4000) {
   });
 }
 
-function setImage(rgba, name, src) {
+function setImage(rgba, name, src, keepEdits = false) {
+  if (!keepEdits) { state.s.edits = []; edit.redo = []; }
+  edit.mergeFrom = null;
   state.rgba = rgba;
   state.imageName = name;
   state.imageSrc = src;
@@ -983,11 +1003,11 @@ function updateToned() {
   state.toned = c;
 }
 
-async function loadSample(kind) {
+async function loadSample(kind, keepEdits = false) {
   if (kind === 'monalisa' || kind === 'rhino') {
-    try { setImage(await loadImage(`assets/${kind}.jpg`), kind, { kind: 'sample', name: kind }); return; } catch { kind = 'sphere'; }
+    try { setImage(await loadImage(`assets/${kind}.jpg`), kind, { kind: 'sample', name: kind }, keepEdits); return; } catch { kind = 'sphere'; }
   }
-  setImage(generateSample(kind).color, kind, { kind: 'sample', name: kind });
+  setImage(generateSample(kind).color, kind, { kind: 'sample', name: kind }, keepEdits);
 }
 
 function bindImage() {
@@ -1071,14 +1091,15 @@ async function applyProject(p, problems) {
   applySettings(p.units, p.settings, p.display);
   const note = () => (problems.length ? ` (with problems: ${problems.join('; ')})` : '');
   if (!p.image) { run(); setStatus(`project opened without an image${note()}`, 'warn'); return; }
-  if (p.image.kind === 'sample') await loadSample(p.image.name);
-  else setImage(await loadImage(p.image.dataURL), p.image.name.replace(/\.[^.]+$/, '') || 'design', p.image);
+  if (p.image.kind === 'sample') await loadSample(p.image.name, true);
+  else setImage(await loadImage(p.image.dataURL), p.image.name.replace(/\.[^.]+$/, '') || 'design', p.image, true);
   if (problems.length) setStatus(`project opened${note()}`, 'warn');
 }
 
 function resetControls() {
-  if (!window.confirm('Reset every control to its default?\n\nThe image stays. My colors are cleared too: save the palette or a project first to keep them.')) return;
+  if (!window.confirm('Reset every control to its default?\n\nThe image stays. My colors and region edits are cleared too: save a project first to keep them.')) return;
   state.preset = 'custom';
+  edit.redo = [];
   applySettings('mm', freshSettings(), { ...DISPLAY });
   state.selColor = -1;
   $('zoom').value = '1';
@@ -1188,6 +1209,142 @@ function renderParams(host, defs, values, prefix) {
   }
 }
 
+// ------------------------------------------------------------------- edits
+// Hand edits (core/edits.js) live in state.s.edits, so they reach the worker,
+// projects and Reset with the other settings; the redo stack is the session's.
+// They belong to one image: a new image starts with none (a project brings its own).
+const EDIT_HELP = {
+  off: 'Pick a tool to change the regions by hand. Edits are re-applied when the settings change, and saved in projects.',
+  recolor: 'Click a region to paint it the chosen color. Shift-click a region to choose its color.',
+  merge: 'Click a region, then the neighbour it should join: it takes that neighbour\'s color.',
+  brush: 'Drag to paint the chosen color; a stroke can make a region of any size (edits are not held to the detail limits). Shift-click picks a color.',
+};
+
+function setTool(t) {
+  edit.tool = t;
+  edit.mergeFrom = null;
+  for (const b of document.querySelectorAll('#editSeg button')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+  $('editColors').hidden = !(t === 'recolor' || t === 'brush');
+  $('brushRow').hidden = t !== 'brush';
+  $('view').style.cursor = t === 'off' ? 'crosshair' : t === 'brush' ? 'cell' : 'pointer';
+  renderEditNote();
+  paint();
+}
+
+function renderEditPalette() {
+  const plan = state.plan;
+  if (!plan) return;
+  if (!edit.hex || !plan.palette.some((p) => p.hex === edit.hex)) edit.hex = plan.palette[0] ? plan.palette[0].hex : null;
+  $('editPal').innerHTML = plan.palette.map((p) =>
+    `<span class="chip pick${p.hex === edit.hex ? ' on' : ''}" data-hex="${p.hex}" title="${escapeHtml(p.name || p.hex)}"><b>${p.num}</b><span class="sw" style="background:${p.hex}"></span></span>`).join('');
+  for (const c of $('editPal').querySelectorAll('.chip')) c.addEventListener('click', () => { edit.hex = c.dataset.hex; renderEditPalette(); });
+}
+
+function renderEditNote() {
+  const n = state.s.edits.length;
+  const plan = state.plan;
+  const idle = plan && plan.stats.edits !== undefined && n > plan.stats.edits ? ` (${n - plan.stats.edits} changed nothing)` : '';
+  $('editNote').textContent = `${EDIT_HELP[edit.tool]} ${n ? `${n} ${n === 1 ? 'edit' : 'edits'}${idle}.` : ''}`;
+  $('undoEdit').disabled = !n;
+  $('redoEdit').disabled = !edit.redo.length;
+  $('clearEdits').disabled = !n;
+}
+
+function pushEdit(e) {
+  state.s.edits.push(e);
+  edit.redo = [];
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function undoEdit() {
+  if (!state.s.edits.length) return;
+  edit.redo.push(state.s.edits.pop());
+  renderEditNote();
+  scheduleRun(0);
+}
+
+function redoEdit() {
+  if (!edit.redo.length) return;
+  state.s.edits.push(edit.redo.pop());
+  renderEditNote();
+  scheduleRun(0);
+}
+
+/** A canvas click with an edit tool on. Returns true when it was an edit. */
+function editClick(x, y, shift) {
+  if (edit.tool === 'off' || !state.plan) return false;
+  const i = regionAt(x, y);
+  if (shift && i >= 0) { edit.hex = state.plan.palette[state.plan.regions[i].c].hex; renderEditPalette(); return true; }
+  if (edit.tool === 'recolor' && i >= 0 && edit.hex) pushEdit({ op: 'recolor', x: r3(x), y: r3(y), hex: edit.hex });
+  if (edit.tool === 'merge' && i >= 0) {
+    if (!edit.mergeFrom) { edit.mergeFrom = { x, y, i }; paint(); }
+    else if (i === edit.mergeFrom.i) { edit.mergeFrom = null; paint(); }   // the same region again: cancel
+    else { const f = edit.mergeFrom; edit.mergeFrom = null; pushEdit({ op: 'merge', x: r3(f.x), y: r3(f.y), x2: r3(x), y2: r3(y) }); }
+  }
+  return true;
+}
+
+const r3 = (v) => Math.round(v * 1000) / 1000;
+
+function bindEdits() {
+  for (const b of document.querySelectorAll('#editSeg button')) b.addEventListener('click', () => setTool(b.dataset.tool));
+  $('undoEdit').addEventListener('click', undoEdit);
+  $('redoEdit').addEventListener('click', redoEdit);
+  $('clearEdits').addEventListener('click', () => {
+    if (!state.s.edits.length) return;
+    edit.redo = state.s.edits.slice().reverse().concat(edit.redo);   // Redo brings them back, last first
+    state.s.edits = [];
+    renderEditNote();
+    scheduleRun(0);
+  });
+  $('brushMm').addEventListener('input', () => { const v = toMm(parseFloat($('brushMm').value), state.units); if (v > 0) edit.brushMm = v; });
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoEdit(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redoEdit(); }
+  });
+  // the brush: a stroke drawn live on the view, applied on release
+  const canvas = $('view');
+  const at = (e) => {
+    const r = canvas.getBoundingClientRect(), plan = state.plan;
+    return [((e.clientX - r.left) / r.width) * plan.piece.W, ((e.clientY - r.top) / r.height) * plan.piece.H];
+  };
+  const dab = (x, y) => {
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = edit.hex;
+    ctx.beginPath(); ctx.arc(x, y, edit.brushMm, 0, 2 * Math.PI); ctx.fill();
+  };
+  canvas.addEventListener('mousedown', (e) => {
+    edit.brushClick = false;   // a stroke that ended off the canvas left no click to swallow
+    if (edit.tool !== 'brush' || !state.plan || !edit.hex || e.shiftKey || e.button !== 0) return;
+    const [x, y] = at(e);
+    edit.stroke = [r3(x), r3(y)];
+    dab(x, y);
+    e.preventDefault();
+  });
+  canvas.addEventListener('mousemove', (e) => {
+    if (!edit.stroke) return;
+    const [x, y] = at(e), p = edit.stroke;
+    const lx = p[p.length - 2], ly = p[p.length - 1];
+    if (Math.hypot(x - lx, y - ly) < edit.brushMm / 3) return;   // enough points to be smooth, few enough to keep
+    p.push(r3(x), r3(y));
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = edit.hex; ctx.lineWidth = 2 * edit.brushMm; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+  });
+  const finish = () => {
+    if (!edit.stroke) return;
+    const pts = edit.stroke;
+    edit.stroke = null;
+    edit.brushClick = true;   // the click that follows a stroke is not a second edit
+    pushEdit({ op: 'brush', hex: edit.hex, r: r3(edit.brushMm), pts });
+  };
+  canvas.addEventListener('mouseup', finish);
+  canvas.addEventListener('mouseleave', finish);
+}
+
 // ------------------------------------------------------------------- misc
 function setStatus(text, cls = '') {
   const el = $('status');
@@ -1249,6 +1406,8 @@ function init() {
   bindExports();
   bindImage();
   bindProjects();
+  bindEdits();
+  setTool('off');
   loadSample('monalisa');
 }
 

@@ -4,6 +4,7 @@
 //   A  tone -> canvas geometry -> the work raster -> the Style chain
 //   B  the palette -> the method's regions (colors, clean-up, detail limits);
 //      aiming for a number of regions, the detail limits are scaled to reach it
+//   E  hand edits (core/edits.js): recolor, merge, brush, on the color map
 //   C  the planar map -> smoothed shared boundaries -> each region's rings, mm
 //   D  the numbers: where, how big, and leaders
 //
@@ -34,6 +35,8 @@ import { edt } from './core/edt.js';
 import { ringsArea, ringsBox } from './core/geom.js';
 import { placeLabels } from './core/labels.js';
 import { byId } from './methods/index.js';
+import { applyEdits } from './core/edits.js';
+import { regionsOf } from './core/segment.js';
 
 /**
  * @param {{width,height,data}} rgba
@@ -87,13 +90,25 @@ export function runPipeline(rgba, settings, opts = {}) {
     const t = aimFor(segAt, s.target, (f, n) => progress(`aiming for ${s.target} regions: ${n} at ×${f.toFixed(2)}`));
     return { colors, pal, seg: t.seg, f: t.f, tries: t.tries };
   });
-  const { pal, seg } = B;
+  const { pal } = B;
+
+  // E: hand edits, after the detail limits (an edit is deliberate) and before tracing
+  const edits = s.edits || [];
+  const keyE = [keyB, edits];
+  const E = stage('E', keyE, () => {
+    if (!edits.length) return { ...B.seg, edits: 0 };
+    progress('applying edits');
+    const ed = applyEdits(B.seg.colors, { w, h, sx, sy }, pal, edits);
+    const { id, count } = regionsOf(ed.colors, w, h);
+    return { ...B.seg, colors: ed.colors, region: id, count, edits: ed.applied };
+  });
+  const seg = E;
   const detail = { f: B.f, tries: B.tries, ...scaledDetail(s, B.f) };
 
   // C: shapes
   const sigmaCap = 0.25 * (detail.minWidth / px);
   const sigma = Math.min(detail.edgeSmooth / px, sigmaCap);
-  const keyC = [keyB, sigma];
+  const keyC = [keyE, sigma];
   const C = stage('C', keyC, () => {
     progress('tracing boundaries');
     const pm = planarMap(seg.region, w, h);
@@ -163,8 +178,9 @@ export function runPipeline(rgba, settings, opts = {}) {
   if (leaders) notes.push(`${leaders} ${leaders === 1 ? 'region is' : 'regions are'} too small for a number, and ${leaders === 1 ? 'has its number' : 'have theirs'} outside on a leader line`);
   if (crowded) notes.push(`${crowded} ${crowded === 1 ? 'number' : 'numbers'} found no room outside either and sit inside their regions (the Problems view shows where)`);
   if (merge > 0 && B.colors.length < s.autoN) notes.push(`${B.colors.length} colors of the ${s.autoN} asked for: the image has no more that are ${merge} ΔE apart`);
-  if (s.targetOn && Math.abs(seg.count - s.target) > tolerance(s.target)) {
-    notes.push(`${seg.count} regions is as near ${s.target} as the detail limits reach (×${B.f.toFixed(2)})`);
+  if (edits.length > seg.edits) notes.push(`${edits.length - seg.edits} of ${edits.length} edits changed nothing (the region was already that color)`);
+  if (s.targetOn && Math.abs(B.seg.count - s.target) > tolerance(s.target)) {
+    notes.push(`${B.seg.count} regions is as near ${s.target} as the detail limits reach (×${B.f.toFixed(2)})`);
   }
   if (detail.edgeSmooth / px > sigmaCap + 1e-9) notes.push('edge smoothing held to a quarter of the narrowest region, so neighbouring boundaries cannot cross');
 
@@ -187,6 +203,7 @@ export function runPipeline(rgba, settings, opts = {}) {
       crowded,
       thin: seg.thin,
       merged: seg.merged,
+      edits: seg.edits,
       smallest: regions.reduce((m, r) => Math.min(m, r.area), Infinity),
     },
   };

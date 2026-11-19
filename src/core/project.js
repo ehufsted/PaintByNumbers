@@ -18,6 +18,7 @@
 import { normalizeHex } from './color.js';
 import { DEFAULTS, PRECISION } from './units.js';
 import { normalizeStyle } from './style.js';
+import { parseEdits } from './edits.js';
 
 export const PROJECT_VERSION = 1;
 export const APP = 'PaintByNumbers';
@@ -70,6 +71,9 @@ export function parseProject(json) {
   }
   settings.mergeOn = typeof src.mergeOn === 'boolean' ? src.mergeOn : DEFAULTS.mergeOn;
   settings.targetOn = typeof src.targetOn === 'boolean' ? src.targetOn : DEFAULTS.targetOn;
+  const ed = parseEdits(src.edits);
+  settings.edits = ed.edits;
+  if (ed.dropped) problems.push(`${ed.dropped} region edits unusable, left out`);
   const st = normalizeStyle(src.style);
   settings.style = st.style;
   problems.push(...st.problems);

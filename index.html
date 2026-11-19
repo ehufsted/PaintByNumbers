@@ -99,6 +99,8 @@
   .autopal { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 4px; margin: 6px 0; }
   .autopal .chip { display: flex; align-items: center; gap: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
   .autopal .chip span.sw { width: 20px; height: 20px; }
+  .autopal .chip.pick { cursor: pointer; border-radius: 4px; padding: 1px 3px; }
+  .autopal .chip.pick.on { outline: 2px solid var(--accent); }
 
   /* the color key */
   table.key { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -372,6 +374,35 @@
           <span class="unit u"></span>
         </div>
         <p class="note">All lengths are on the canvas. Narrowest and Smallest region are what a brush can paint and a number can fit in. A preset also sets the Painterly brush in Style.</p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Edit regions</summary>
+      <div class="body">
+        <div class="row">
+          <label>Tool</label>
+          <div class="seg" id="editSeg">
+            <button data-tool="off" aria-pressed="true">Off</button>
+            <button data-tool="recolor" aria-pressed="false">Recolor</button>
+            <button data-tool="merge" aria-pressed="false">Merge</button>
+            <button data-tool="brush" aria-pressed="false">Brush</button>
+          </div>
+        </div>
+        <div class="group" id="editColors" hidden>
+          <div class="autopal" id="editPal"></div>
+        </div>
+        <div class="row" id="brushRow" hidden>
+          <label for="brushMm">Brush size</label>
+          <input type="number" id="brushMm" min="0.2" step="any">
+          <span class="unit u"></span>
+        </div>
+        <div class="buttons">
+          <button id="undoEdit" title="Ctrl+Z">Undo</button>
+          <button id="redoEdit" title="Ctrl+Y">Redo</button>
+          <button id="clearEdits">Clear edits</button>
+        </div>
+        <p class="note" id="editNote"></p>
       </div>
     </details>
 
