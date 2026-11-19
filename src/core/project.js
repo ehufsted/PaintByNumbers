@@ -71,14 +71,6 @@ export function parseProject(json) {
   }
   settings.mergeOn = typeof src.mergeOn === 'boolean' ? src.mergeOn : DEFAULTS.mergeOn;
   settings.targetOn = typeof src.targetOn === 'boolean' ? src.targetOn : DEFAULTS.targetOn;
-  settings.methodId = typeof src.methodId === 'string' ? src.methodId : DEFAULTS.methodId;   // unknown ids fall back to Flat in the pipeline
-  settings.methodParams = {};
-  if (src.methodParams && typeof src.methodParams === 'object') {
-    for (const [id, p] of Object.entries(src.methodParams)) {
-      if (!p || typeof p !== 'object' || Array.isArray(p)) continue;
-      settings.methodParams[id] = Object.fromEntries(Object.entries(p).filter(([, v]) => (typeof v === 'number' && isFinite(v)) || typeof v === 'boolean' || typeof v === 'string'));
-    }
-  }
   const ed = parseEdits(src.edits);
   settings.edits = ed.edits;
   if (ed.dropped) problems.push(`${ed.dropped} region edits unusable, left out`);

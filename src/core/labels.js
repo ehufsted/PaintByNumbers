@@ -116,10 +116,7 @@ class CircleGrid {
 
 /**
  * Numbers for every region.
- * @param {Array<{rings:number[][], num:number, seed?:number[], fixed?:object[]}>} regions  num: the color's number;
- *   fixed: a gradient region's two numbers, already placed ([{x, y, text, room}], one per end): they
- *   are checked for room and kept clear of, never moved
- * A gradient region's label carries its second number as `second`.
+ * @param {Array<{rings:number[][], num:number, seed?:number[]}>} regions  num: the color's number
  * @param {{fontSize:number, lineWidth:number, W:number, H:number,
  *          clearance:(x:number, y:number)=>number}} o
  *   clearance: mm from (x, y) to the nearest boundary, read off the work raster
@@ -132,23 +129,13 @@ export function placeLabels(regions, o) {
   const fs = o.fontSize;
   const grid = new CircleGrid(Math.max(2, 4 * fs));
   const out = regions.map((r) => {
-    if (r.fixed) {
-      const mk = (q) => ({ x: q.x, y: q.y, size: fs, text: q.text, leader: null, room: Math.max(0, q.room - lw),
-        crowded: fitFont(q.text.length, Math.max(0, q.room - lw)) < fs, small: false });
-      const l = mk(r.fixed[0]);
-      l.second = mk(r.fixed[1]);
-      return l;
-    }
     const text = String(r.num);
     const pole = polylabel(r.rings, Math.max(0.02, fs / 30), r.seed);
     const room = Math.max(0, pole.d - lw);
     return { x: pole.x, y: pole.y, size: fs, text, leader: null, crowded: false, room, small: fitFont(text.length, room) < fs };
   });
   // numbers that fit, first: each is inside its own region's largest circle, so none overlap
-  for (const l of out) {
-    if (!l.small) grid.add(l.x, l.y, halfDiag(l.text.length, l.size));
-    if (l.second) grid.add(l.second.x, l.second.y, halfDiag(l.second.text.length, l.second.size));
-  }
+  for (const l of out) if (!l.small) grid.add(l.x, l.y, halfDiag(l.text.length, l.size));
   // then the leaders, biggest region first (the order only matters where spots compete)
   const order = out.map((l, i) => i).filter((i) => out[i].small).sort((a, b) => out[b].room - out[a].room || a - b);
   const DIRS = 16;

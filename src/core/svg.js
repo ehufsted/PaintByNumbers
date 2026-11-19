@@ -52,23 +52,6 @@ export function regionPathD(rings) {
   return d;
 }
 
-/**
- * Gradient fills as <defs>: one linearGradient per blend region, in canvas mm
- * (userSpaceOnUse), from its c0 paint to its c1 paint. `fillOf` names a
- * region's fill: its paint, or url(#pbn-g<i>).
- */
-export function gradientDefs(plan) {
-  const out = [];
-  plan.regions.forEach((r, i) => {
-    const f = r.fill;
-    if (!f || f.type !== 'gradient') return;
-    out.push(`<linearGradient id="pbn-g${i}" gradientUnits="userSpaceOnUse" x1="${fmt(f.x0)}" y1="${fmt(f.y0)}" x2="${fmt(f.x1)}" y2="${fmt(f.y1)}">` +
-      `<stop offset="0" stop-color="${plan.palette[f.c0].hex}"/><stop offset="1" stop-color="${plan.palette[f.c1].hex}"/></linearGradient>`);
-  });
-  return out.length ? `<defs>${out.join('')}</defs>` : '';
-}
-export const fillOf = (plan, r, i) => (r.fill && r.fill.type === 'gradient' ? `url(#pbn-g${i})` : plan.palette[r.c].hex);
-
 /** Path data of a chain. */
 export function chainPathD(c) {
   let d = '';
@@ -107,8 +90,8 @@ export function patternLines(plan, o = {}) {
   const p = { ...PATTERN, ...o };
   const out = [];
   if (p.color) {
-    out.push(gradientDefs(plan), '<g id="fills" stroke="none" fill-rule="evenodd">');
-    plan.regions.forEach((r, i) => out.push(`<path d="${regionPathD(r.rings)}" fill="${fillOf(plan, r, i)}"/>`));
+    out.push('<g id="fills" stroke="none" fill-rule="evenodd">');
+    for (const r of plan.regions) out.push(`<path d="${regionPathD(r.rings)}" fill="${plan.palette[r.c].hex}"/>`);
     out.push('</g>');
   }
   const a = attrs(p.cssVars, [['stroke', inkHex(p.lineDark), '--pbn-line'], ['stroke-width', fmt(p.lineWidth), '--pbn-lw', true]]);
@@ -127,11 +110,6 @@ export function patternNumbers(plan, o = {}) {
   out.push(`<g id="leaders" ${attrs(p.cssVars, [['stroke', num, '--pbn-num'], ['fill', num, '--pbn-num'], ['stroke-width', fmt(lw), '--pbn-llw', true]])}>`);
   for (const r of plan.regions) {
     const l = r.label;
-    if (l.second) {
-      // a blend: a dashed line between its two numbers
-      const [a, b] = blendLine(l, l.second);
-      if (a) out.push(`<path d="M${fmt(a[0])} ${fmt(a[1])}L${fmt(b[0])} ${fmt(b[1])}" fill="none" stroke-dasharray="${fmt(3 * lw)} ${fmt(2 * lw)}"/>`);
-    }
     if (!l.leader) continue;
     const [x0, y0] = leaderStart(l);
     out.push(`<path d="M${fmt(x0)} ${fmt(y0)}L${fmt(l.leader.x)} ${fmt(l.leader.y)}"/>`,
@@ -147,21 +125,11 @@ export function patternNumbers(plan, o = {}) {
   for (const r of plan.regions) {
     const l = r.label;
     // with the size a CSS variable (the printout), the offset is in em so it follows a raised size
-    for (const q of l.second ? [l, l.second] : [l]) {
-      const pos = uniform ? `y="${fmt(q.y)}" dy="${BASELINE}em"` : `y="${fmt(q.y + BASELINE * q.size)}" font-size="${fmt(q.size, 2)}"`;
-      out.push(`<text x="${fmt(q.x)}" ${pos}>${escapeXml(q.text)}</text>`);
-    }
+    const pos = uniform ? `y="${fmt(l.y)}" dy="${BASELINE}em"` : `y="${fmt(l.y + BASELINE * l.size)}" font-size="${fmt(l.size, 2)}"`;
+    out.push(`<text x="${fmt(l.x)}" ${pos}>${escapeXml(l.text)}</text>`);
   }
   out.push('</g>');
   return out.join('\n');
-}
-
-/** A blend's dashed line: from the edge of one number's circle to the other's; [null] when they touch. */
-export function blendLine(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-  const ra = 0.7 * a.size, rb = 0.7 * b.size;
-  if (d <= ra + rb) return [null, null];
-  return [[a.x + (dx / d) * ra, a.y + (dy / d) * ra], [b.x - (dx / d) * rb, b.y - (dy / d) * rb]];
 }
 
 /** Where a leader line leaves its number: the edge of the number's circle, toward the dot. */
@@ -191,13 +159,13 @@ export function patternSVG(plan, o = {}) {
 
 /** The painted result at true size: every region in its color, optionally numbered. */
 export function paintedSVG(plan, o = {}) {
-  const parts = [gradientDefs(plan), '<g id="fills" fill-rule="evenodd" stroke-linejoin="round">'];
+  const parts = ['<g id="fills" fill-rule="evenodd" stroke-linejoin="round">'];
   // each region stroked thinly in its own color as well, so no hairline of
   // background shows between neighbours where a renderer anti-aliases both edges
-  plan.regions.forEach((r, i) => {
-    const c = fillOf(plan, r, i);
+  for (const r of plan.regions) {
+    const c = plan.palette[r.c].hex;
     parts.push(`<path d="${regionPathD(r.rings)}" fill="${c}" stroke="${c}" stroke-width="0.1"/>`);
-  });
+  }
   parts.push('</g>');
   return wrap(plan, o.title || 'painted', parts.join('\n'));
 }

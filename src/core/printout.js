@@ -131,8 +131,7 @@ export function planHTML(plan, opts = {}) {
       `<div class="two">${prev}${view(0, 0, W, H, `${scaled(ks)}width:${fmt(W * ks)}mm;height:${fmt(H * ks)}mm;border:0.2mm solid #999`)}</div>` +
       `<table class="key"><thead><tr><th>#</th><th></th><th>Name</th><th>Color</th><th class="r">Regions</th><th class="r">Area</th><th class="r">Share</th><th class="r">Paint, ml</th></tr></thead><tbody>${rows}</tbody></table>` +
       `<p class="small">Paint estimate: ${cov} ml per 100 cm², one coat; buy more for a second coat over the lines. ` +
-      'Paint light to dark, starting with 1: a darker color covers a lighter slip, not the other way round.' +
-      (plan.stats.gradients ? ' Two numbers joined by a dashed line: blend from one color to the other across the region, while the paint is wet.' : '') + '</p>' + notes);
+      'Paint light to dark, starting with 1: a darker color covers a lighter slip, not the other way round.</p>' + notes);
   }
   if (opts.fit) {
     const k = Math.min(room.w / W, (room.h + 8) / H);

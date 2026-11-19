@@ -27,19 +27,6 @@ printable pattern with the numbers.
   regions beside them. *Smallest region* is the least area: smaller regions join
   the neighbour nearest their color. *Edge smoothing* rounds the boundaries.
   Fine / Medium / Coarse set these and the Painterly brush.
-- **Aim for N regions:** in Detail, scales the clean-up, narrowest, smallest
-  region and edge smoothing together (keeping their proportions) until the
-  design has N regions, within 5%. The note shows the limits it used.
-- **Fill:** *Flat color*, or *Flat + gradients*: where the image is a smooth
-  blend (a sky, soft shading), neighbouring bands become one region painted as
-  a blend between two colors, numbered with both and a dashed line between
-  them. A blend is kept only where it matches the image at least as well as
-  the bands, its two colors are close, and it has room for both numbers.
-- **Edit regions:** *Recolor* (click a region), *Merge* (click a region, then
-  the neighbour it joins), *Brush* (drag to paint); Shift-click picks a
-  region's color; Undo / Redo (Ctrl+Z / Ctrl+Y) and Clear. Edits are kept as
-  positions and colors, so they are re-applied when the settings change, and
-  they are saved in projects (a new image starts without them).
 - **Shared boundaries:** each boundary between two regions is found and smoothed
   once, and both regions are built from it, so neighbours always meet exactly
   (no gaps, no double lines) however much it is smoothed.
@@ -49,10 +36,7 @@ printable pattern with the numbers.
   line to a dot inside it.
 - **Pattern:** line width, line darkness and number darkness, and numbers on or
   off. Light grey lines are covered by one coat of paint; black shows through
-  pale colors. *Pencil grid* draws squares of a chosen spacing, columns
-  numbered and rows lettered, to copy the pattern onto the canvas square by
-  square: on the Pattern and Overlay views, the Pattern SVG and the printed fit
-  and 1:1 pages (each split page labels its own squares).
+  pale colors.
 
 ## Run it
 

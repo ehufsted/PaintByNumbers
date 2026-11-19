@@ -15,8 +15,7 @@ import { DEFAULTS, PRESETS, toMm, pieceGeometry, applyTone } from './core/units.
 import { LINEAR_LUT, linearToHex, normalizeHex, rgbToOKLab } from './core/color.js';
 import { autoPalette, numberPalette, closePairs } from './core/palette.js';
 import { inRings } from './core/geom.js';
-import { patternSVG, paintedSVG, inkHex, leaderStart, blendLine, downloadFile, FONT, BASELINE } from './core/svg.js';
-import { METHODS, byId, defaultsFor } from './methods/index.js';
+import { patternSVG, paintedSVG, inkHex, leaderStart, downloadFile, FONT, BASELINE } from './core/svg.js';
 import { planHTML, PAPERS, pageWindows, printable, fmtLen, areaText, paintMl } from './core/printout.js';
 import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
@@ -211,17 +210,6 @@ function showDetailPreset() {
 }
 
 /** Aiming for a number of regions: what was reached, and the limits that reached it. */
-/** The Fill choice (the method registry) and its own controls. */
-function buildMethodUI() {
-  const m = byId(state.s.methodId);
-  $('method').value = m.id;
-  $('methodBlurb').textContent = m.blurb;
-  if (!state.s.methodParams[m.id]) state.s.methodParams[m.id] = defaultsFor(m);
-  const values = { ...defaultsFor(m), ...state.s.methodParams[m.id] };
-  state.s.methodParams[m.id] = values;
-  renderParams($('methodParams'), m.params, values, `method-${m.id}`);
-}
-
 function renderTargetNote() {
   const el = $('targetNote'), plan = state.plan;
   el.hidden = !state.s.targetOn;
@@ -278,8 +266,6 @@ function bindLengths() {
     });
   }
   $('precision').addEventListener('change', () => { state.s.precision = $('precision').value; scheduleRun(0); });
-  $('method').innerHTML = METHODS.map((m) => `<option value="${m.id}">${escapeHtml(m.label)}</option>`).join('');
-  $('method').addEventListener('change', () => { state.s.methodId = $('method').value; buildMethodUI(); scheduleRun(0); });
   $('targetOn').addEventListener('change', () => { state.s.targetOn = $('targetOn').checked; renderTargetNote(); scheduleRun(0); });
   $('target').addEventListener('input', () => {
     const v = parseInt($('target').value, 10);
@@ -629,13 +615,7 @@ function drawPainted(ctx, plan, k) {
   ctx.lineJoin = 'round';
   ctx.lineWidth = 0.8 / k;   // its own color round each region: no hairline seams between neighbours
   for (const r of plan.regions) {
-    let c = plan.palette[r.c].hex;
-    const f = r.fill;
-    if (f && f.type === 'gradient') {
-      c = ctx.createLinearGradient(f.x0, f.y0, f.x1, f.y1);
-      c.addColorStop(0, plan.palette[f.c0].hex);
-      c.addColorStop(1, plan.palette[f.c1].hex);
-    }
+    const c = plan.palette[r.c].hex;
     ctx.fillStyle = c; ctx.strokeStyle = c;
     const p = regionPath(r);
     ctx.fill(p, 'evenodd');
@@ -676,16 +656,8 @@ function drawNumbers(ctx, plan, k, ink, filter = null) {
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(l.leader.x, l.leader.y); ctx.stroke();
       ctx.beginPath(); ctx.arc(l.leader.x, l.leader.y, Math.max(0.2, 1.2 * lw), 0, 2 * Math.PI); ctx.fill();
     }
-    if (l.second) {
-      const [a, b] = blendLine(l, l.second);
-      if (a) {
-        ctx.save(); ctx.setLineDash([3 * lw, 2 * lw]);
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
-        ctx.restore();
-      }
-    }
     ctx.font = `${l.size}px ${FONT}`;
-    for (const q of l.second ? [l, l.second] : [l]) ctx.fillText(q.text, q.x, q.y + BASELINE * q.size);
+    ctx.fillText(l.text, l.x, l.y + BASELINE * l.size);
   }
 }
 
@@ -756,7 +728,7 @@ function drawProblems(ctx, plan, k) {
   ctx.globalAlpha = 1;
   const mark = (r, color) => { ctx.fillStyle = color; ctx.fill(regionPath(r), 'evenodd'); };
   for (const r of plan.regions) {
-    if (r.label.crowded || (r.label.second && r.label.second.crowded)) mark(r, '#e0303099');
+    if (r.label.crowded) mark(r, '#e0303099');
     else if (r.label.leader) mark(r, '#ff9a1a99');
   }
   drawLines(ctx, plan, k, '#555555');
@@ -788,7 +760,7 @@ function drawView(ctx, plan, view, k) {
   if (state.selColor >= 0 && view !== 'source' && view !== 'diff') {
     ctx.strokeStyle = '#ff00cc';
     ctx.lineWidth = Math.max(0.5, 2.5 / k);
-    for (const r of plan.regions) if (r.c === state.selColor || (r.fill && r.fill.c1 === state.selColor)) ctx.stroke(regionPath(r));
+    for (const r of plan.regions) if (r.c === state.selColor) ctx.stroke(regionPath(r));
   }
 }
 
@@ -857,9 +829,7 @@ function bindHover() {
     if (i < 0) { $('hint').textContent = HINTS[state.view] || ''; return; }
     const r = state.plan.regions[i], p = state.plan.palette[r.c];
     const l = r.label;
-    const q = r.fill && r.fill.type === 'gradient' ? state.plan.palette[r.fill.c1] : null;
-    const what = q ? `a blend from color ${p.num} to ${q.num}` : `color ${p.num}${p.name ? ` (${p.name})` : ''} ${p.hex}`;
-    $('hint').textContent = `region ${i + 1}: ${what} · ${areaText(r.area, state.units)} · ` +
+    $('hint').textContent = `region ${i + 1}: color ${p.num}${p.name ? ` (${p.name})` : ''} ${p.hex} · ${areaText(r.area, state.units)} · ` +
       `number ${(l.size * 72 / 25.4).toFixed(1)} pt${l.leader ? ', outside on a leader' : ''}${l.crowded ? ', crowded' : ''} · ΔE ${r.dE.toFixed(1)}`;
   });
   canvas.addEventListener('mouseleave', () => { $('hint').textContent = HINTS[state.view] || ''; });
@@ -1095,9 +1065,6 @@ function applySettings(units, s, disp) {
   $('autoN').value = s.autoN;
   $('autoNVal').textContent = s.autoN;
   $('mergeOn').checked = s.mergeOn;
-  if (!s.methodParams) s.methodParams = {};
-  if (!METHODS.some((m) => m.id === s.methodId)) s.methodId = METHODS[0].id;
-  if ($('method').options.length) buildMethodUI();
   $('targetOn').checked = s.targetOn;
   $('target').value = s.target;
   renderTargetNote();
@@ -1441,7 +1408,6 @@ function init() {
   bindProjects();
   bindEdits();
   setTool('off');
-  buildMethodUI();
   loadSample('monalisa');
 }
 

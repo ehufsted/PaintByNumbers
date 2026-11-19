@@ -82,23 +82,10 @@ merged (mass-weighted, in OKLab) and k-means is run again with more clusters
 until merging leaves the N asked for (up to 3N clusters); fewer come back only
 when the image has no more colors that far apart, and a note says so.
 
-## Edits, gradients and the target
-
-Hand edits (`core/edits.js`) are operations in mm with hex colors, applied to
-the color map after the detail limits (stage E), so they re-apply after any
-settings change and are never undone by the limits. The method's grouping
-(stage G, `methods/gradient.js` and `core/gradients.js`) runs on the edited map:
-neighbours whose shared boundary is a band in a smooth blend, not an edge,
-join into one region with a linear gradient between two paints, accepted only
-where it is no worse than the bands, has room for both numbers, and the line
-between them stays inside it. Every later stage reads region ids and fills, so
-a blend is just a region with a `gradient` fill. Aiming for N regions scales
-the four detail limits by one factor found by a bracketed search in stage B.
-
 ## The stage cache
 
-`pipeline.js` runs six stages (A raster and Style chain, B palette and regions,
-E edits, G grouping, C shapes, D numbers). Each remembers the JSON of the settings it was made from,
+`pipeline.js` runs four stages (A raster and pre-filter, B palette and regions,
+C shapes, D numbers; the Style chain is part of A). Each remembers the JSON of the settings it was made from,
 including the earlier stages' keys; the worker keeps the cache between runs. A
 change to the number sizes re-runs only D (0.1 s against 3.4 s for the Mona Lisa
 at Normal). The harness checks a cached run equals a fresh one. The image is

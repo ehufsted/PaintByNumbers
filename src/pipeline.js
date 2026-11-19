@@ -5,7 +5,6 @@
 //   B  the palette -> the method's regions (colors, clean-up, detail limits);
 //      aiming for a number of regions, the detail limits are scaled to reach it
 //   E  hand edits (core/edits.js): recolor, merge, brush, on the color map
-//   G  the method's grouping, if it has one (Flat + gradients: blends)
 //   C  the planar map -> smoothed shared boundaries -> each region's rings, mm
 //   D  the numbers: where, how big, and leaders
 //
@@ -34,9 +33,8 @@ import { planarMap, smoothChains, ringPoints } from './core/planar.js';
 import { boundaryMask } from './core/segment.js';
 import { edt } from './core/edt.js';
 import { ringsArea, ringsBox } from './core/geom.js';
-import { placeLabels, halfDiag } from './core/labels.js';
-import { byId, defaultsFor } from './methods/index.js';
-import { gradientT } from './core/gradients.js';
+import { placeLabels } from './core/labels.js';
+import { byId } from './methods/index.js';
 import { applyEdits } from './core/edits.js';
 import { regionsOf } from './core/segment.js';
 
@@ -104,25 +102,13 @@ export function runPipeline(rgba, settings, opts = {}) {
     const { id, count } = regionsOf(ed.colors, w, h);
     return { ...B.seg, colors: ed.colors, region: id, count, edits: ed.applied };
   });
+  const seg = E;
   const detail = { f: B.f, tries: B.tries, ...scaledDetail(s, B.f) };
-
-  // G: the method's grouping (gradient regions), on the edited map
-  const mParams = { ...defaultsFor(method), ...((s.methodParams || {})[method.id] || {}) };
-  // a blend's halves need room for a two-digit number and half the line
-  const roomPx = (halfDiag(2, s.fontSize) + s.lineWidth / 2) / px;
-  const keyG = [keyE, method.id, method.group ? [mParams, roomPx] : null];
-  const G = stage('G', keyG, () => {
-    if (!method.group) return { region: E.region, count: E.count, fills: null, gradients: 0 };
-    progress('finding blends');
-    return method.group({ colors: E.colors, region: E.region, count: E.count, lab: A.lab, pal: pal.map((p) => p.lab),
-      w, h, sx, sy, params: mParams, minAreaPx: detail.minArea / (px * px), roomPx });
-  });
-  const seg = { ...E, region: G.region, count: G.count };
 
   // C: shapes
   const sigmaCap = 0.25 * (detail.minWidth / px);
   const sigma = Math.min(detail.edgeSmooth / px, sigmaCap);
-  const keyC = [keyG, sigma];
+  const keyC = [keyE, sigma];
   const C = stage('C', keyC, () => {
     progress('tracing boundaries');
     const pm = planarMap(seg.region, w, h);
@@ -131,46 +117,29 @@ export function runPipeline(rgba, settings, opts = {}) {
     const chains = pm.chains.map((c, i) => ({ pts: toMm(sm[i]), a: c.a, b: c.b, closed: c.closed }));
     const n = seg.count;
     // per region: its color, pixel count, ΔE against the image, deepest pixel
-    // (a gradient region: the deepest in each half, t below and above 0.5, where
-    // its two numbers go; its ΔE is against the blend at each pixel)
     const color = new Int32Array(n), cnt = new Float64Array(n), dEsum = new Float64Array(n);
     const dB = edt(boundaryMask(seg.region, w, h), w, h);
     const deep = new Float64Array(n).fill(-1), deepAt = new Int32Array(n);
-    const deep2 = new Float64Array(n).fill(-1), deepAt2 = new Int32Array(n);
     const palLab = pal.map((p) => p.lab);
-    const fills = G.fills;
     let dEall = 0;
     for (let i = 0; i < w * h; i++) {
       const r = seg.region[i];
-      const f = fills && fills[r];
-      color[r] = f ? (f.type === 'solid' ? f.c : f.c0) : seg.colors[i];
+      color[r] = seg.colors[i];
       cnt[r]++;
-      let p = palLab[seg.colors[i]], half = 0;
-      if (f && f.type === 'gradient') {
-        const t = gradientT(f, ((i % w) + 0.5) * sx, (Math.floor(i / w) + 0.5) * sy);
-        const a = palLab[f.c0], b = palLab[f.c1];
-        p = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])];
-        half = t >= 0.5 ? 1 : 0;
-      }
+      const p = palLab[seg.colors[i]];
       const dE = 100 * Math.hypot(A.labSrc[3 * i] - p[0], A.labSrc[3 * i + 1] - p[1], A.labSrc[3 * i + 2] - p[2]);
       dEsum[r] += dE; dEall += dE;
-      if (half) { if (dB[i] > deep2[r]) { deep2[r] = dB[i]; deepAt2[r] = i; } } else if (dB[i] > deep[r]) { deep[r] = dB[i]; deepAt[r] = i; }
+      if (dB[i] > deep[r]) { deep[r] = dB[i]; deepAt[r] = i; }
     }
-    const at = (i) => [((i % w) + 0.5) * sx, (Math.floor(i / w) + 0.5) * sy];
     const nbrs = Array.from({ length: n }, () => new Set());
     for (const c of pm.chains) if (c.a >= 0 && c.b >= 0) { nbrs[c.a].add(c.b); nbrs[c.b].add(c.a); }
     const regions = pm.rings.map((rs, r) => {
       const rings = rs.map((ring) => toMm(ringPoints(ring, sm, pm.chains)));
-      const f = fills && fills[r];
-      const grad = f && f.type === 'gradient' && deep[r] >= 0 && deep2[r] >= 0;
-      const out = {
+      return {
         c: color[r], rings, area: r3(ringsArea(rings)), bbox: ringsBox(rings).map(r3),
-        nbrs: [...nbrs[r]].sort((a, b) => a - b), dE: r3(dEsum[r] / cnt[r]),
-        fill: grad ? { type: 'gradient', c0: f.c0, c1: f.c1, x0: r3(f.x0), y0: r3(f.y0), x1: r3(f.x1), y1: r3(f.y1) } : { type: 'solid' },
-        seed: at(deep[r] >= 0 ? deepAt[r] : deepAt2[r]),
+        nbrs: [...nbrs[r]].sort((a, b) => a - b), fill: method.fill(r), dE: r3(dEsum[r] / cnt[r]),
+        seed: [((deepAt[r] % w) + 0.5) * sx, (Math.floor(deepAt[r] / w) + 0.5) * sy],
       };
-      if (grad) out.seeds = [{ at: at(deepAt[r]), room: (deep[r] + 0.5) * px, c: f.c0 }, { at: at(deepAt2[r]), room: (deep2[r] + 0.5) * px, c: f.c1 }];
-      return out;
     });
     return { chains, regions, dB, meanDE: dEall / (w * h) };
   });
@@ -183,10 +152,7 @@ export function runPipeline(rgba, settings, opts = {}) {
       const gx = Math.min(w - 1, Math.max(0, Math.floor(x / sx))), gy = Math.min(h - 1, Math.max(0, Math.floor(y / sy)));
       return (C.dB[gy * w + gx] + 0.5) * px;
     };
-    return placeLabels(C.regions.map((r) => ({
-      rings: r.rings, num: pal[r.c].num, seed: r.seed,
-      fixed: r.seeds && r.seeds.map((q) => ({ x: q.at[0], y: q.at[1], text: String(pal[q.c].num), room: q.room })),
-    })), {
+    return placeLabels(C.regions.map((r) => ({ rings: r.rings, num: pal[r.c].num, seed: r.seed })), {
       fontSize: s.fontSize, lineWidth: s.lineWidth, W: geo.W, H: geo.H, clearance,
     });
   });
@@ -194,18 +160,12 @@ export function runPipeline(rgba, settings, opts = {}) {
   progress('assembling');
   const regions = C.regions.map((r, i) => {
     const l = D[i];
-    const { seed, seeds, ...rest } = r;
-    const label = { ...l, x: r3(l.x), y: r3(l.y), size: r3(l.size), room: r3(l.room), leader: l.leader && { x: r3(l.leader.x), y: r3(l.leader.y) } };
-    if (l.second) label.second = { ...l.second, x: r3(l.second.x), y: r3(l.second.y), size: r3(l.second.size), room: r3(l.second.room) };
-    return { ...rest, label };
+    const { seed, ...rest } = r;
+    return { ...rest, label: { ...l, x: r3(l.x), y: r3(l.y), size: r3(l.size), room: r3(l.room), leader: l.leader && { x: r3(l.leader.x), y: r3(l.leader.y) } } };
   });
   const nameOf = (p) => (s.paletteMode === 'custom' ? (s.colors[p.from] && s.colors[p.from].name) || '' : p.name);
   const palette = pal.map((p) => ({ num: p.num, hex: p.hex, name: nameOf(p), area: 0, regions: 0, used: false }));
-  for (const r of regions) {
-    // a blend uses both its paints: half the area each
-    const cs = r.fill.type === 'gradient' ? [r.fill.c0, r.fill.c1] : [r.c];
-    for (const c of cs) { const p = palette[c]; p.area += r.area / cs.length; p.regions++; p.used = true; }
-  }
+  for (const r of regions) { const p = palette[r.c]; p.area += r.area; p.regions++; p.used = true; }
   for (const p of palette) p.area = r3(p.area);
 
   const notes = [];
@@ -214,8 +174,7 @@ export function runPipeline(rgba, settings, opts = {}) {
   const unused = palette.filter((p) => !p.used);
   if (unused.length) notes.push(`${unused.length === 1 ? 'color' : 'colors'} ${unused.map((p) => p.num).join(', ')} ${unused.length === 1 ? 'is' : 'are'} not used`);
   const leaders = regions.filter((r) => r.label.leader).length;
-  const crowded = regions.filter((r) => r.label.crowded || (r.label.second && r.label.second.crowded)).length;
-  if (G.gradients) notes.push(`${G.gradients} ${G.gradients === 1 ? 'region is a blend' : 'regions are blends'} between two colors: numbered with both, joined by a dashed line`);
+  const crowded = regions.filter((r) => r.label.crowded).length;
   if (leaders) notes.push(`${leaders} ${leaders === 1 ? 'region is' : 'regions are'} too small for a number, and ${leaders === 1 ? 'has its number' : 'have theirs'} outside on a leader line`);
   if (crowded) notes.push(`${crowded} ${crowded === 1 ? 'number' : 'numbers'} found no room outside either and sit inside their regions (the Problems view shows where)`);
   if (merge > 0 && B.colors.length < s.autoN) notes.push(`${B.colors.length} colors of the ${s.autoN} asked for: the image has no more that are ${merge} ΔE apart`);
@@ -245,7 +204,6 @@ export function runPipeline(rgba, settings, opts = {}) {
       thin: seg.thin,
       merged: seg.merged,
       edits: seg.edits,
-      gradients: G.gradients,
       smallest: regions.reduce((m, r) => Math.min(m, r.area), Infinity),
     },
   };
