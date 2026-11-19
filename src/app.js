@@ -373,7 +373,8 @@ function bindPalette() {
   const useSet = (add) => {
     const set = COLOR_SETS.find((c) => c.id === $('colorSet').value);
     if (!set) return;
-    const mine = state.s.paletteMode === 'custom' && state.s.colors.length;
+    // My colors as they stand, whichever mode is showing: Add never drops them
+    const mine = state.s.colors.length;
     // Add skips colors already in the list (two sets often share white and black)
     const have = new Set(mine ? state.s.colors.map((c) => c.hex) : []);
     const extra = colorSet(set.id).filter((c) => !have.has(c.hex));

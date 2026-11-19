@@ -96,24 +96,31 @@ export function mergeClusters({ centers, mass }, dE) {
  * a pot. Clusters closer than mergeDE are merged, and the freed slots are
  * filled: k-means is run again with more clusters (N, N + 1, ...) until merging
  * leaves N, or as near N as it gets without going over (up to 3N clusters).
- * Fewer than N come back only when the image has no more colors that far apart.
+ * It gives up after STALL cluster counts in a row that add no color: an image
+ * with fewer distinct colors than asked (two tones and some noise) only ever
+ * merges back to the same few, and without that it ran all the way to 3N
+ * (7 s for N = 40). Fewer than N come back only then.
  * @param {{width, height, data}} rgba  encoded pixels
  * @returns {Array<{hex:string, name:string, share:number}>}
  */
+const STALL = 4;   // cluster counts in a row with no new color before the refill gives up
+
 export function autoPalette(rgba, n, seed = 1, mergeDE = 0) {
   const N = Math.max(1, Math.round(n));
   const run = (k) => kmeansPoints(rgba, k, seed, (r, g, b) => rgbToOKLab(r, g, b));
   let got = run(N);
   if (mergeDE > 0) {
     let best = mergeClusters(got, mergeDE);
-    for (let k = N + 1; best.centers.length < N && k <= 3 * N; k++) {
+    for (let k = N + 1, stall = 0; best.centers.length < N && k <= 3 * N && stall < STALL; k++) {
       const raw = run(k);
+      stall++;
       // fewer clusters than asked: k-means emptied one (by chance) or the image has
       // no more distinct colors; either way this k cannot fill a slot, but a
       // larger k still may
       if (raw.centers.length < k) continue;
       const m = mergeClusters(raw, mergeDE);
       if (m.centers.length > N) break;
+      if (m.centers.length > best.centers.length) stall = 0;
       if (m.centers.length >= best.centers.length) best = m;
     }
     got = best;

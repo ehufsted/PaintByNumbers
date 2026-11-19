@@ -31,6 +31,13 @@ export function run() {
   check('merging: the freed slot goes to the small distinct colors', Math.max(...small) < 2, `worst ${num(Math.max(...small), 2)} ΔE`);
   const mc = mergeClusters({ centers: [[0.5, 0, 0], [0.51, 0, 0], [0.9, 0, 0]], mass: [0.25, 0.75, 0] }, 4);
   check('mergeClusters: a close pair becomes its weighted mean', mc.centers.length === 2 && Math.abs(mc.centers[0][0] - 0.5075) < 1e-12);
+  // fewer distinct colors than asked: the refill gives up instead of running to 3N
+  let seedN = 7;
+  const rnd = () => { seedN = (seedN * 16807) % 2147483647; return seedN / 2147483647; };
+  const twoTone = makeRGBA(200, 100, (x) => (x < 100 ? [60, 60, 70] : [200, 190, 170]).map((v) => v + (rnd() - 0.5) * 16));
+  const t0 = Date.now();
+  const tt = autoPalette(twoTone, 40, 1, 4);
+  check('two tones with noise, 40 asked: their 2 colors, without running on to 3N clusters', tt.length === 2 && Date.now() - t0 < 2000, `${tt.length} colors in ${Date.now() - t0} ms`);
   const flat4 = autoPalette(makeRGBA(10, 10, () => [100, 100, 100]), 4, 1, 4);
   check('merging on a flat image still gives its one color', flat4.length === 1);
 
