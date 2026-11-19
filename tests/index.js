@@ -11,6 +11,9 @@ import * as segment from './core.segment.js';
 import * as planar from './core.planar.js';
 import * as labels from './core.labels.js';
 import * as output from './core.output.js';
+import * as grid from './core.grid.js';
+import * as edits from './core.edits.js';
+import * as target from './target.js';
 import * as pipeline from './pipeline.js';
 
 export const SECTIONS = [
@@ -23,6 +26,9 @@ export const SECTIONS = [
   ['core.planar', planar],
   ['core.labels', labels],
   ['core.output', output],
+  ['core.grid', grid],
+  ['core.edits', edits],
+  ['target', target],
   ['pipeline', pipeline],
 ];
 

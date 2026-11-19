@@ -10,6 +10,8 @@
 // of even a pale color where black shows through. Numbers can be darker than the
 // lines, to stay readable at small sizes.
 
+import { gridSVG, gridFont } from './grid.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 export const FONT = 'Arial, Helvetica, sans-serif';
 
@@ -148,9 +150,11 @@ const wrap = (plan, title, body) => {
   ].join('\n');
 };
 
-/** The printable pattern at true size. */
+/** The printable pattern at true size; `grid` (mm, 0 = none) adds the pencil transfer grid. */
 export function patternSVG(plan, o = {}) {
-  return wrap(plan, o.title || 'paint by numbers', patternBody(plan, o));
+  const { W, H } = plan.piece;
+  const grid = o.grid > 0 ? `\n${gridSVG(W, H, o.grid, { x0: 0, y0: 0, x1: W, y1: H }, { fs: gridFont(o.grid), lw: 0.15 })}` : '';
+  return wrap(plan, o.title || 'paint by numbers', patternBody(plan, o) + grid);
 }
 
 /** The painted result at true size: every region in its color, optionally numbered. */

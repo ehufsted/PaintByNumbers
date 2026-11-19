@@ -3,7 +3,7 @@
 //   { app: 'PaintByNumbers', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
 //     units, settings: {...units.DEFAULTS, colors: [{hex, name}], style (core/style.js)},
-//     display: {lineDark, numDark, numbers, coverage} }
+//     display: {lineDark, numDark, numbers, coverage, grid, gridMm} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (k-means is seeded), so the same
 // image and settings rebuild it exactly; saving it would only make the file
@@ -18,6 +18,7 @@
 import { normalizeHex } from './color.js';
 import { DEFAULTS, PRECISION } from './units.js';
 import { normalizeStyle } from './style.js';
+import { parseEdits } from './edits.js';
 
 export const PROJECT_VERSION = 1;
 export const APP = 'PaintByNumbers';
@@ -28,9 +29,10 @@ const NUMS = {
   saturation: (x) => x >= 0, autoN: (x) => Number.isInteger(x) && x >= 1 && x <= 60, mergeDE: (x) => x >= 0,
   cleanup: (x) => x >= 0, minWidth: (x) => x >= 0, minArea: (x) => x >= 0,
   edgeSmooth: (x) => x >= 0, fontSize: (x) => x > 0, lineWidth: (x) => x >= 0,
+  target: (x) => Number.isInteger(x) && x >= 1,
 };
 
-export const DISPLAY = { lineDark: 0.45, numDark: 0.6, numbers: true, coverage: 1.5 };
+export const DISPLAY = { lineDark: 0.45, numDark: 0.6, numbers: true, coverage: 1.5, grid: false, gridMm: 25 };
 
 /** The project as JSON text. `p` is the shape above (savedAt is filled in). */
 export function projectJSON(p) {
@@ -68,6 +70,10 @@ export function parseProject(json) {
     else problems.push(`${k}: unusable, using ${DEFAULTS[k]}`);
   }
   settings.mergeOn = typeof src.mergeOn === 'boolean' ? src.mergeOn : DEFAULTS.mergeOn;
+  settings.targetOn = typeof src.targetOn === 'boolean' ? src.targetOn : DEFAULTS.targetOn;
+  const ed = parseEdits(src.edits);
+  settings.edits = ed.edits;
+  if (ed.dropped) problems.push(`${ed.dropped} region edits unusable, left out`);
   const st = normalizeStyle(src.style);
   settings.style = st.style;
   problems.push(...st.problems);
@@ -90,6 +96,8 @@ export function parseProject(json) {
     numDark: unit(d.numDark, DISPLAY.numDark),
     numbers: typeof d.numbers === 'boolean' ? d.numbers : DISPLAY.numbers,
     coverage: isFinite(Number(d.coverage)) && Number(d.coverage) > 0 ? Number(d.coverage) : DISPLAY.coverage,
+    grid: typeof d.grid === 'boolean' ? d.grid : DISPLAY.grid,
+    gridMm: isFinite(Number(d.gridMm)) && Number(d.gridMm) >= 2 ? Number(d.gridMm) : DISPLAY.gridMm,
   };
   return { project: { image, units: o.units === 'in' ? 'in' : 'mm', settings, display }, problems };
 }

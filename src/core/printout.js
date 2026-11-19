@@ -30,6 +30,7 @@
 // with a ruler. DOM-free: the app adds only the preview image's data URL.
 
 import { patternLines, patternNumbers, fmt, escapeXml } from './svg.js';
+import { gridSVG, gridFont } from './grid.js';
 import { fromMm } from './units.js';
 
 export const PAPERS = {
@@ -86,7 +87,8 @@ export const paintMl = (mm2, perHundred) => (mm2 / 10000) * perHundred;
  * @param {{paper?:string, units?:'mm'|'in', summary?:boolean, fit?:boolean, pattern?:boolean,
  *          numbers1to1?:boolean, previewURL?:string, title?:string, display?:object, coverage?:number}} opts
  *   display: the pattern's look (svg.js PATTERN; its numbers flag is not used here);
- *   numbers1to1: numbers on the 1:1 pages too; coverage: ml of paint per 100 cm²
+ *   numbers1to1: numbers on the 1:1 pages too; coverage: ml of paint per 100 cm²;
+ *   grid: the pencil transfer grid's spacing, mm (0 = none), on the fit and 1:1 pages
  */
 export function planHTML(plan, opts = {}) {
   const paper = PAPERS[opts.paper] || PAPERS.letter;
@@ -104,9 +106,12 @@ export function planHTML(plan, opts = {}) {
   const scaled = (k) => '--pbn-line:#000000;--pbn-num:#000000;' +
     `--pbn-lw:${fmt(Math.max(lw, MIN_LINE / k))};--pbn-llw:${fmt(Math.max(llw, (0.6 * MIN_LINE) / k))};` +
     `--pbn-dot:${fmt(Math.max(0.2, 1.2 * llw, (1.2 * 0.6 * MIN_LINE) / k))};--pbn-fs:${fmt(Math.max(fs, MIN_FONT / k), 2)};`;
-  const view = (x0, y0, w, h, css, numbers = true) =>
+  const view = (x0, y0, w, h, css, numbers = true, extra = '') =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x0)} ${fmt(y0)} ${fmt(w)} ${fmt(h)}" style="${css}"><use href="#pbn-lines"/>` +
-    `${numbers ? '<use href="#pbn-numbers"/>' : ''}</svg>`;
+    `${numbers ? '<use href="#pbn-numbers"/>' : ''}${extra}</svg>`;
+  // the pencil grid over a window, at scale k (labels and lines held to the minimums)
+  const gridAt = (win, k) => (opts.grid > 0
+    ? gridSVG(W, H, opts.grid, win, { fs: Math.max(gridFont(opts.grid), MIN_FONT / k), lw: Math.max(0.15, MIN_LINE / k) }) : '');
   const bar = '<svg class="bar" width="70mm" height="6mm" viewBox="0 0 70 6"><path d="M0 3h50M0 1v4M50 1v4" stroke="#000" stroke-width="0.3" fill="none"/>' +
     '<text x="52" y="4.2" font-size="3" font-family="Arial, Helvetica, sans-serif">50 mm</text></svg>';
 
@@ -130,7 +135,7 @@ export function planHTML(plan, opts = {}) {
   }
   if (opts.fit) {
     const k = Math.min(room.w / W, (room.h + 8) / H);
-    page(`${title} · whole pattern (scaled to fit)`, view(0, 0, W, H, `${scaled(k)}width:${fmt(W * k)}mm;height:${fmt(H * k)}mm`));
+    page(`${title} · whole pattern (scaled to fit)`, view(0, 0, W, H, `${scaled(k)}width:${fmt(W * k)}mm;height:${fmt(H * k)}mm`, true, gridAt({ x0: 0, y0: 0, x1: W, y1: H }, k)));
   }
   if (opts.pattern !== false) {
     const pw = pageWindows(W, H, room.w, room.h);
@@ -138,7 +143,7 @@ export function planHTML(plan, opts = {}) {
       const w = wd.x1 - wd.x0, h = wd.y1 - wd.y0;
       const where = pw.windows.length > 1 ? ` · page ${wd.r + 1}-${wd.c + 1} of ${pw.rows} × ${pw.cols} (overlap ${OVERLAP} mm)` : '';
       page(`${title} · pattern at 1:1${where} · top ↑`,
-        view(wd.x0, wd.y0, w, h, `width:${fmt(w)}mm;height:${fmt(h)}mm;outline:0.2mm dashed #bbb`, !!opts.numbers1to1) + bar);
+        view(wd.x0, wd.y0, w, h, `width:${fmt(w)}mm;height:${fmt(h)}mm;outline:0.2mm dashed #bbb`, !!opts.numbers1to1, gridAt(wd, 1)) + bar);
     }
   }
 
