@@ -92,10 +92,20 @@ at Normal). The harness checks a cached run equals a fresh one. The image is
 named by a key the app changes per image, so the cache never serves another
 image's stage. The app sends the pixels only with a new image.
 
-## Room for gradients
+## Edits and the target
+
+Hand edits (`core/edits.js`) are operations in mm with hex colors, applied to
+the color map after the detail limits (stage E), so they re-apply after any
+settings change and are never undone by the limits. Aiming for N regions
+scales the four detail limits by one factor, found by a bracketed search in
+stage B (`aimFor` in pipeline.js).
+
+## Gradients: tried and removed
 
 A method (`methods/`) returns the region map and gives each region its fill;
-every region carries `fill: {type: 'solid'}` today. A gradient method would make
-regions the same way and return another fill type; the planar map, numbers and
-outputs do not change. Manual editing (merging or recoloring regions) can work on
-the plan's regions and their `nbrs` lists.
+every region carries `fill: {type: 'solid'}`. Gradient fills were built and
+then removed (2026-11-18): band-boundary detection worked, but blends through
+several paints, straight or round a centre, with strictness and retries, only
+blended a modest share of real images and were judged not useful. The fill
+field is kept so another fill type could be added without changing the planar
+map, the numbers or the outputs.
