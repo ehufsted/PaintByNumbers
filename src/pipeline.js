@@ -246,7 +246,6 @@ export function runPipeline(rgba, settings, opts = {}) {
       merged: seg.merged,
       edits: seg.edits,
       gradients: G.gradients,
-      blendWhy: G.why || null,
       smallest: regions.reduce((m, r) => Math.min(m, r.area), Infinity),
     },
   };
