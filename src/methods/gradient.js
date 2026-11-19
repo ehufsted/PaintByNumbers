@@ -13,14 +13,8 @@ import { findGradients } from '../core/gradients.js';
 export default {
   id: 'gradient',
   label: 'Flat + gradients',
-  blurb: 'Smooth blends in the image (skies, soft shading) become one region painted as a blend through a few neighbouring colors, straight or round a centre, numbered with each color and a dashed line; the rest stays flat.',
+  blurb: 'Smooth blends in the image (skies, soft shading) become one region painted as a blend between two colors, numbered with both and a dashed line; the rest stays flat.',
   params: [
-    { key: 'strictness', label: 'Strictness', type: 'select', def: 'normal', options: [['strict', 'Strict'], ['normal', 'Normal'], ['loose', 'Loose']],
-      hint: 'how closely a blend must match the image (against the flat bands it replaces), how well it must fit, and how far apart neighbouring paints may be' },
-    { key: 'maxPaints', label: 'Paints per blend', type: 'range', min: 2, max: 6, step: 1, def: 4,
-      hint: 'the most colors one blend may run through, in order' },
-    { key: 'radial', label: 'Round blends (around a centre) too', type: 'checkbox', def: true,
-      hint: 'blends that run outward from a centre, like shading round a highlight, as well as straight ones' },
     { key: 'blend', label: 'Blend below', type: 'range', min: 0.1, max: 0.9, step: 0.05, def: 0.35, dp: 2,
       hint: 'how smooth the image must be across a boundary for its two regions to become one blend: the change across it, as a share of the difference between the two paints (higher blends more)' },
     { key: 'minSize', label: 'Smallest blend', type: 'range', min: 1, max: 30, step: 1, def: 6, unit: '× region',
@@ -35,8 +29,7 @@ export default {
    */
   group(ctx) {
     const p = ctx.params;
-    return findGradients({ ...ctx, blend: p.blend, minArea: Math.max(1, p.minSize * ctx.minAreaPx), room: ctx.roomPx,
-      strictness: p.strictness, maxPaints: p.maxPaints, radial: p.radial });
+    return findGradients({ ...ctx, blend: p.blend, minArea: Math.max(1, p.minSize * ctx.minAreaPx), room: ctx.roomPx });
   },
 
   fill() {

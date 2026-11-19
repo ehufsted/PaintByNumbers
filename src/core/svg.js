@@ -11,7 +11,6 @@
 // lines, to stay readable at small sizes.
 
 import { gridSVG, gridFont } from './grid.js';
-import { gradientStops } from './gradients.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const FONT = 'Arial, Helvetica, sans-serif';
@@ -54,20 +53,17 @@ export function regionPathD(rings) {
 }
 
 /**
- * Gradient fills as <defs>: one gradient per blend region, in canvas mm
- * (userSpaceOnUse), through its paints (core/gradients.js gradientStops):
- * linear, or radial round its centre. `fillOf` names a region's fill: its
- * paint, or url(#pbn-g<i>).
+ * Gradient fills as <defs>: one linearGradient per blend region, in canvas mm
+ * (userSpaceOnUse), from its c0 paint to its c1 paint. `fillOf` names a
+ * region's fill: its paint, or url(#pbn-g<i>).
  */
 export function gradientDefs(plan) {
   const out = [];
   plan.regions.forEach((r, i) => {
     const f = r.fill;
     if (!f || f.type !== 'gradient') return;
-    const stops = gradientStops(f, (c) => plan.palette[c].hex).map((s) => `<stop offset="${fmt(s.offset, 4)}" stop-color="${s.hex}"/>`).join('');
-    out.push(f.shape === 'radial'
-      ? `<radialGradient id="pbn-g${i}" gradientUnits="userSpaceOnUse" cx="${fmt(f.cx)}" cy="${fmt(f.cy)}" r="${fmt(f.R)}">${stops}</radialGradient>`
-      : `<linearGradient id="pbn-g${i}" gradientUnits="userSpaceOnUse" x1="${fmt(f.x0)}" y1="${fmt(f.y0)}" x2="${fmt(f.x1)}" y2="${fmt(f.y1)}">${stops}</linearGradient>`);
+    out.push(`<linearGradient id="pbn-g${i}" gradientUnits="userSpaceOnUse" x1="${fmt(f.x0)}" y1="${fmt(f.y0)}" x2="${fmt(f.x1)}" y2="${fmt(f.y1)}">` +
+      `<stop offset="0" stop-color="${plan.palette[f.c0].hex}"/><stop offset="1" stop-color="${plan.palette[f.c1].hex}"/></linearGradient>`);
   });
   return out.length ? `<defs>${out.join('')}</defs>` : '';
 }
@@ -131,13 +127,10 @@ export function patternNumbers(plan, o = {}) {
   out.push(`<g id="leaders" ${attrs(p.cssVars, [['stroke', num, '--pbn-num'], ['fill', num, '--pbn-num'], ['stroke-width', fmt(lw), '--pbn-llw', true]])}>`);
   for (const r of plan.regions) {
     const l = r.label;
-    if (l.chain) {
-      // a blend: a dashed line from each number to the next
-      const q = [l, ...l.chain];
-      for (let k = 1; k < q.length; k++) {
-        const [a, b] = blendLine(q[k - 1], q[k]);
-        if (a) out.push(`<path d="M${fmt(a[0])} ${fmt(a[1])}L${fmt(b[0])} ${fmt(b[1])}" fill="none" stroke-dasharray="${fmt(3 * lw)} ${fmt(2 * lw)}"/>`);
-      }
+    if (l.second) {
+      // a blend: a dashed line between its two numbers
+      const [a, b] = blendLine(l, l.second);
+      if (a) out.push(`<path d="M${fmt(a[0])} ${fmt(a[1])}L${fmt(b[0])} ${fmt(b[1])}" fill="none" stroke-dasharray="${fmt(3 * lw)} ${fmt(2 * lw)}"/>`);
     }
     if (!l.leader) continue;
     const [x0, y0] = leaderStart(l);
@@ -154,7 +147,7 @@ export function patternNumbers(plan, o = {}) {
   for (const r of plan.regions) {
     const l = r.label;
     // with the size a CSS variable (the printout), the offset is in em so it follows a raised size
-    for (const q of [l, ...(l.chain || [])]) {
+    for (const q of l.second ? [l, l.second] : [l]) {
       const pos = uniform ? `y="${fmt(q.y)}" dy="${BASELINE}em"` : `y="${fmt(q.y + BASELINE * q.size)}" font-size="${fmt(q.size, 2)}"`;
       out.push(`<text x="${fmt(q.x)}" ${pos}>${escapeXml(q.text)}</text>`);
     }

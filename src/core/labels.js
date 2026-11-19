@@ -117,9 +117,9 @@ class CircleGrid {
 /**
  * Numbers for every region.
  * @param {Array<{rings:number[][], num:number, seed?:number[], fixed?:object[]}>} regions  num: the color's number;
- *   fixed: a gradient region's numbers, already placed ([{x, y, text, room}], one per paint): they
+ *   fixed: a gradient region's two numbers, already placed ([{x, y, text, room}], one per end): they
  *   are checked for room and kept clear of, never moved
- * A gradient region's label carries its other numbers, in order, as `chain`.
+ * A gradient region's label carries its second number as `second`.
  * @param {{fontSize:number, lineWidth:number, W:number, H:number,
  *          clearance:(x:number, y:number)=>number}} o
  *   clearance: mm from (x, y) to the nearest boundary, read off the work raster
@@ -136,7 +136,7 @@ export function placeLabels(regions, o) {
       const mk = (q) => ({ x: q.x, y: q.y, size: fs, text: q.text, leader: null, room: Math.max(0, q.room - lw),
         crowded: fitFont(q.text.length, Math.max(0, q.room - lw)) < fs, small: false });
       const l = mk(r.fixed[0]);
-      l.chain = r.fixed.slice(1).map(mk);
+      l.second = mk(r.fixed[1]);
       return l;
     }
     const text = String(r.num);
@@ -147,7 +147,7 @@ export function placeLabels(regions, o) {
   // numbers that fit, first: each is inside its own region's largest circle, so none overlap
   for (const l of out) {
     if (!l.small) grid.add(l.x, l.y, halfDiag(l.text.length, l.size));
-    for (const q of l.chain || []) grid.add(q.x, q.y, halfDiag(q.text.length, q.size));
+    if (l.second) grid.add(l.second.x, l.second.y, halfDiag(l.second.text.length, l.second.size));
   }
   // then the leaders, biggest region first (the order only matters where spots compete)
   const order = out.map((l, i) => i).filter((i) => out[i].small).sort((a, b) => out[b].room - out[a].room || a - b);
