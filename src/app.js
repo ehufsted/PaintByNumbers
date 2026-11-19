@@ -21,6 +21,7 @@ import { projectJSON, parseProject, DISPLAY } from './core/project.js';
 import { filterById, defaultStyle } from './core/style.js';
 import { COLOR_SETS, colorSet } from './core/colorsets.js';
 import { generateSample } from './app/samples.js';
+import { gridLines, gridLabels, gridFont, GRID_COLOR } from './core/grid.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'paintbynumbers.v1';
@@ -183,6 +184,7 @@ const unitLabel = () => (state.units === 'in' ? 'in' : 'mm');
 
 function showLengths() {
   for (const id of LEN_IDS) $(id).value = L(state.s[id]);
+  $('gridMm').value = L(state.disp.gridMm);
   const a = state.units === 'in' ? state.s.minArea / MM2_PER_IN2 : state.s.minArea;
   $('minArea').value = String(Math.round(a * 10000) / 10000);
   $('areaUnit').textContent = state.units === 'in' ? 'in²' : 'mm²';
@@ -640,6 +642,28 @@ function drawPattern(ctx, plan, k) {
   ctx.fillRect(0, 0, plan.piece.W, plan.piece.H);
   drawLines(ctx, plan, k, inkHex(state.disp.lineDark));
   if (state.disp.numbers) drawNumbers(ctx, plan, k, inkHex(state.disp.numDark));
+  drawGrid(ctx, plan, k);
+}
+
+/** The pencil grid (core/grid.js), when it is on. */
+function drawGrid(ctx, plan, k) {
+  const sp = state.disp.grid ? state.disp.gridMm : 0;
+  if (!(sp > 0)) return;
+  const { W, H } = plan.piece;
+  const { xs, ys } = gridLines(W, H, sp);
+  ctx.strokeStyle = GRID_COLOR;
+  ctx.lineWidth = Math.max(0.15, 0.8 / k);
+  ctx.beginPath();
+  for (const x of xs) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (const y of ys) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  const fs = Math.max(gridFont(sp), 9 / k);   // readable on screen at any zoom
+  const L = gridLabels(W, H, sp, { x0: 0, y0: 0, x1: W, y1: H });
+  ctx.fillStyle = GRID_COLOR;
+  ctx.font = `bold ${fs}px ${FONT}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  for (const c of L.cols) ctx.fillText(c.text, c.x, 0.4 * fs + 0.72 * fs);
+  for (const r of L.rows) ctx.fillText(r.text, 0.4 * fs + 0.6 * fs, r.y + 0.36 * fs);
 }
 
 /** ΔE between the painted design and the image, per screen pixel: white on target, amber about 10, dark red 20+. */
@@ -698,6 +722,7 @@ function drawView(ctx, plan, view, k) {
     ctx.fillRect(0, 0, plan.piece.W, plan.piece.H);
     drawLines(ctx, plan, k, '#000000cc');
     if (state.disp.numbers) drawNumbers(ctx, plan, k, '#000000');
+    drawGrid(ctx, plan, k);
   } else if (view === 'diff') drawDiff(ctx, plan, k);
   else if (view === 'problems') drawProblems(ctx, plan, k);
   if (state.selColor >= 0 && view !== 'source' && view !== 'diff') {
@@ -828,7 +853,8 @@ function renderKey() {
 const fileBase = () => state.imageName;
 
 function bindExports() {
-  const look = () => ({ lineWidth: state.s.lineWidth, lineDark: state.disp.lineDark, numDark: state.disp.numDark, numbers: state.disp.numbers });
+  const look = () => ({ lineWidth: state.s.lineWidth, lineDark: state.disp.lineDark, numDark: state.disp.numDark, numbers: state.disp.numbers,
+    grid: state.disp.grid ? state.disp.gridMm : 0 });
   $('exportPattern').addEventListener('click', () => {
     if (state.plan) downloadFile(patternSVG(state.plan, { ...look(), title: state.imageName }), `${fileBase()}-pattern.svg`, 'image/svg+xml');
   });
@@ -866,7 +892,7 @@ function bindExports() {
     const html = planHTML(plan, {
       paper: $('paper').value, units: state.units, title: `${state.imageName} — paint by numbers`,
       summary: $('pSummary').checked, fit: $('pFit').checked, pattern: $('pPattern').checked, numbers1to1: $('pNumbers').checked,
-      previewURL: renderPNG(plan, 'painted', 1400), display: look(), coverage: state.disp.coverage,
+      previewURL: renderPNG(plan, 'painted', 1400), display: look(), coverage: state.disp.coverage, grid: look().grid,
     });
     const w = window.open('', '_blank');
     if (!w) { setStatus('the browser blocked the new window: allow pop-ups for this page', 'bad'); return; }
@@ -1013,6 +1039,7 @@ function applySettings(units, s, disp) {
   $('numDark').value = Math.round(100 * disp.numDark);
   $('numDarkVal').textContent = `${Math.round(100 * disp.numDark)}%`;
   $('numbers').checked = disp.numbers;
+  $('grid').checked = disp.grid;
   $('coverage').value = disp.coverage;
   $('preset').value = state.preset;
   renderWarnings();
@@ -1169,6 +1196,11 @@ function bindDisplay() {
     });
   }
   $('numbers').addEventListener('change', () => { state.disp.numbers = $('numbers').checked; save(); paint(); });
+  $('grid').addEventListener('change', () => { state.disp.grid = $('grid').checked; save(); paint(); });
+  $('gridMm').addEventListener('input', () => {
+    const v = toMm(parseFloat($('gridMm').value), state.units);
+    if (v >= 2) { state.disp.gridMm = v; save(); paint(); }
+  });
   $('coverage').addEventListener('input', () => {
     const v = parseFloat($('coverage').value);
     if (v > 0) { state.disp.coverage = v; save(); renderKey(); }

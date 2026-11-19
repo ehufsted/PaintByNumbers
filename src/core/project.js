@@ -3,7 +3,7 @@
 //   { app: 'PaintByNumbers', version, savedAt,
 //     image: { kind: 'sample', name } | { kind: 'file', name, dataURL },
 //     units, settings: {...units.DEFAULTS, colors: [{hex, name}], style (core/style.js)},
-//     display: {lineDark, numDark, numbers, coverage} }
+//     display: {lineDark, numDark, numbers, coverage, grid, gridMm} }
 //
 // THE PLAN IS NOT SAVED. It is deterministic (k-means is seeded), so the same
 // image and settings rebuild it exactly; saving it would only make the file
@@ -30,7 +30,7 @@ const NUMS = {
   edgeSmooth: (x) => x >= 0, fontSize: (x) => x > 0, lineWidth: (x) => x >= 0,
 };
 
-export const DISPLAY = { lineDark: 0.45, numDark: 0.6, numbers: true, coverage: 1.5 };
+export const DISPLAY = { lineDark: 0.45, numDark: 0.6, numbers: true, coverage: 1.5, grid: false, gridMm: 25 };
 
 /** The project as JSON text. `p` is the shape above (savedAt is filled in). */
 export function projectJSON(p) {
@@ -90,6 +90,8 @@ export function parseProject(json) {
     numDark: unit(d.numDark, DISPLAY.numDark),
     numbers: typeof d.numbers === 'boolean' ? d.numbers : DISPLAY.numbers,
     coverage: isFinite(Number(d.coverage)) && Number(d.coverage) > 0 ? Number(d.coverage) : DISPLAY.coverage,
+    grid: typeof d.grid === 'boolean' ? d.grid : DISPLAY.grid,
+    gridMm: isFinite(Number(d.gridMm)) && Number(d.gridMm) >= 2 ? Number(d.gridMm) : DISPLAY.gridMm,
   };
   return { project: { image, units: o.units === 'in' ? 'in' : 'mm', settings, display }, problems };
 }
